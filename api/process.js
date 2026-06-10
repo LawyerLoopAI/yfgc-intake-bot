@@ -14,11 +14,36 @@ const { saveBriefToDrive } = require("../output/driveDeposit");
 
 function isAuthorized(req) {
   const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
   const header =
     (req.headers && (req.headers.authorization || req.headers.Authorization)) ||
     "";
-  return header === `Bearer ${expected}`;
+
+  // Non-secret debug log � only logs lengths and presence, never the values.
+  console.log(
+    `auth: env CRON_SECRET ${
+      expected ? `present (${expected.length} chars)` : "MISSING"
+    }; ` +
+      `header authorization ${
+        header ? `present (${header.length} chars)` : "MISSING"
+      }`
+  );
+
+  if (!expected) return false;
+  if (!header) return false;
+
+  // Permissive Bearer extraction � handles "Bearer X", "bearer X", and extra whitespace.
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    console.log("auth: header is present but not in 'Bearer <token>' format");
+    return false;
+  }
+
+  const token = match[1].trim();
+  const matches = token === expected;
+  console.log(
+    `auth: token match=${matches} (expected len ${expected.length}, got len ${token.length})`
+  );
+  return matches;
 }
 
 async function processOneEmail(authClient, client, messageId) {
@@ -33,7 +58,7 @@ async function processOneEmail(authClient, client, messageId) {
   };
 
   try {
-    console.log(`  → Parsing message ${messageId}`);
+    console.log(`  ? Parsing message ${messageId}`);
     const parsed = await parseMessage(authClient, messageId);
     result.subject = parsed.subject;
     console.log(
@@ -42,7 +67,7 @@ async function processOneEmail(authClient, client, messageId) {
       }`
     );
 
-    console.log(`  → Uploading email + attachments to Drive`);
+    console.log(`  ? Uploading email + attachments to Drive`);
     const driveResult = await uploadEmailToDrive(
       authClient,
       parsed,
@@ -53,13 +78,13 @@ async function processOneEmail(authClient, client, messageId) {
       `    uploaded ${driveResult.uploadedFiles.length} file(s) into subfolder`
     );
 
-    console.log(`  → Calling Claude for triage analysis`);
+    console.log(`  ? Calling Claude for triage analysis`);
     const analysis = await analyzeEmail(parsed, client);
 
-    console.log(`  → Building intake brief`);
+    console.log(`  ? Building intake brief`);
     const brief = buildBrief(parsed, analysis, driveResult, client);
 
-    console.log(`  → Saving brief to Drive`);
+    console.log(`  ? Saving brief to Drive`);
     const briefUrl = await saveBriefToDrive(
       authClient,
       brief,
@@ -67,15 +92,15 @@ async function processOneEmail(authClient, client, messageId) {
     );
     result.briefUrl = briefUrl;
 
-    console.log(`  → Marking message ${messageId} processed`);
+    console.log(`  ? Marking message ${messageId} processed`);
     await markProcessed(authClient, messageId);
 
     result.success = true;
-    console.log(`  ✓ Done with ${messageId}`);
+    console.log(`  ? Done with ${messageId}`);
   } catch (err) {
     result.success = false;
     result.error = err.message;
-    console.error(`  ✗ Failed processing ${messageId}:`, err.message);
+    console.error(`  ? Failed processing ${messageId}:`, err.message);
   }
 
   return result;
@@ -87,7 +112,7 @@ async function runPipeline() {
   const authClient = await getAuthClient();
 
   for (const client of clients) {
-    console.log(`→ Checking emails for ${client.id} (${client.senderEmail})`);
+    console.log(`? Checking emails for ${client.id} (${client.senderEmail})`);
 
     let ids = [];
     try {
@@ -100,7 +125,7 @@ async function runPipeline() {
       continue;
     }
 
-    console.log(`  → Found ${ids.length} new email(s)`);
+    console.log(`  ? Found ${ids.length} new email(s)`);
 
     for (const id of ids) {
       const result = await processOneEmail(authClient, client, id);
@@ -114,6 +139,8 @@ async function runPipeline() {
 module.exports = async (req, res) => {
   const method = (req && req.method) || "GET";
 
+  // Vercel Cron sends GET; manual invocations from a script may send POST.
+  // Accept both. Reject anything else.
   if (method !== "POST" && method !== "GET") {
     if (res && typeof res.status === "function") {
       return res.status(405).json({ ok: false, error: "Method not allowed" });
