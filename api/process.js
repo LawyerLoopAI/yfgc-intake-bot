@@ -11,6 +11,7 @@ const { uploadEmailToDrive } = require("../drive/uploader");
 const { analyzeEmail } = require("../claude/analyze");
 const { buildBrief } = require("../output/briefBuilder");
 const { saveBriefToDrive } = require("../output/driveDeposit");
+const { sendNotification } = require("../output/notify");
 
 function isAuthorized(req) {
   const expected = process.env.CRON_SECRET;
@@ -18,7 +19,7 @@ function isAuthorized(req) {
     (req.headers && (req.headers.authorization || req.headers.Authorization)) ||
     "";
 
-  // Non-secret debug log — only logs lengths and presence, never the values.
+  // Non-secret debug log â€” only logs lengths and presence, never the values.
   console.log(
     `auth: env CRON_SECRET ${
       expected ? `present (${expected.length} chars)` : "MISSING"
@@ -31,7 +32,7 @@ function isAuthorized(req) {
   if (!expected) return false;
   if (!header) return false;
 
-  // Permissive Bearer extraction — handles "Bearer X", "bearer X", and extra whitespace.
+  // Permissive Bearer extraction â€” handles "Bearer X", "bearer X", and extra whitespace.
   const match = header.match(/^Bearer\s+(.+)$/i);
   if (!match) {
     console.log("auth: header is present but not in 'Bearer <token>' format");
@@ -94,6 +95,20 @@ async function processOneEmail(authClient, client, messageId) {
 
     console.log(`  ? Marking message ${messageId} processed`);
     await markProcessed(authClient, messageId);
+
+    try {
+      console.log(`  â†’ Sending notification email`);
+      await sendNotification(authClient, {
+        clientName: client.clientName,
+        from: parsed.from,
+        subject: parsed.subject,
+        subfolderUrl: driveResult.subfolderUrl,
+        briefUrl: result.briefUrl,
+        uploadedFiles: driveResult.uploadedFiles,
+      });
+    } catch (notifyErr) {
+      console.error(`  Failed to send notification: ${notifyErr.message}`);
+    }
 
     result.success = true;
     console.log(`  ? Done with ${messageId}`);
