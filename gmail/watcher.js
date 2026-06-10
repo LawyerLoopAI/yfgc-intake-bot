@@ -2,7 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const { google } = require("googleapis");
 
-const PROCESSED_PATH = path.join(__dirname, "..", "processed-ids.json");
+// Vercel's project FS is read-only; only /tmp is writable.
+const PROCESSED_PATH = process.env.VERCEL
+  ? "/tmp/processed-ids.json"
+  : path.join(__dirname, "..", "processed-ids.json");
 
 function loadProcessedIds() {
   if (!fs.existsSync(PROCESSED_PATH)) {
