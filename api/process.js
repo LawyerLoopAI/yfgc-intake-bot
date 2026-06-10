@@ -114,7 +114,7 @@ async function runPipeline() {
 module.exports = async (req, res) => {
   const method = (req && req.method) || "GET";
 
-  if (method !== "POST") {
+  if (method !== "POST" && method !== "GET") {
     if (res && typeof res.status === "function") {
       return res.status(405).json({ ok: false, error: "Method not allowed" });
     }
