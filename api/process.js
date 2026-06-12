@@ -13,35 +13,6 @@ const { buildBrief } = require("../output/briefBuilder");
 const { saveBriefToDrive } = require("../output/driveDeposit");
 const { sendNotification } = require("../output/notify");
 
-function sanitizeForFilename(name) {
-  if (!name) return "";
-  return name
-    .replace(/[\\/:*?"<>|\r\n\t]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function formatDateOnly(rawDate) {
-  if (rawDate) {
-    const d = new Date(rawDate);
-    if (!isNaN(d.getTime())) {
-      try {
-        return d.toLocaleDateString("en-CA");
-      } catch (_) {
-        return d.toISOString().slice(0, 10);
-      }
-    }
-  }
-  return new Date().toISOString().slice(0, 10);
-}
-
-function buildBriefFilename(parsedEmail) {
-  const datePrefix = formatDateOnly(parsedEmail && parsedEmail.date);
-  const subject = sanitizeForFilename((parsedEmail && parsedEmail.subject) || "(no subject)");
-  const trimmedSubject = subject.length > 60 ? subject.slice(0, 60).trim() : subject;
-  return `${datePrefix} — ${trimmedSubject} — intake-brief.md`;
-}
-
 function isAuthorized(req) {
   const expected = process.env.CRON_SECRET;
   const header =
@@ -120,13 +91,12 @@ async function processOneEmail(authClient, client, messageId) {
     console.log(`  ? Building intake brief`);
     const brief = buildBrief(parsed, analysis, driveResult, client);
 
-    console.log(`  ? Saving brief to client Drive folder`);
-    const briefFilename = buildBriefFilename(parsed);
+    console.log(`  ? Saving brief alongside email in archive subfolder`);
     const briefUrl = await saveBriefToDrive(
       authClient,
       brief,
-      client.driveFolderId,
-      briefFilename
+      driveResult.subfolderId,
+      "intake-brief.md"
     );
     result.briefUrl = briefUrl;
 
