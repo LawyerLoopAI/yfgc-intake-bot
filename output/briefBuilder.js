@@ -1,10 +1,24 @@
+function extractEmailAddress(fromHeader) {
+  if (!fromHeader) return "";
+  const angle = fromHeader.match(/<([^>]+)>/);
+  if (angle) return angle[1].trim();
+  const bare = fromHeader.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+  return bare ? bare[0] : fromHeader.trim();
+}
+
 function buildBrief(parsedEmail, claudeAnalysis, driveResult, client) {
   const clientName = (client && client.clientName) || "(unknown client)";
   const from = (parsedEmail && parsedEmail.from) || "(unknown sender)";
+  const replyTo = extractEmailAddress(from);
   const date = (parsedEmail && parsedEmail.date) || "(no date)";
   const subject = (parsedEmail && parsedEmail.subject) || "(no subject)";
-  const subfolderUrl =
+  const archiveUrl =
     (driveResult && driveResult.subfolderUrl) || "(no Drive link)";
+  const gmailMessageId = (parsedEmail && parsedEmail.messageId) || "";
+  const gmailThreadId = (parsedEmail && parsedEmail.threadId) || "";
+  const gmailThreadUrl = gmailThreadId
+    ? `https://mail.google.com/mail/u/0/#inbox/${gmailThreadId}`
+    : "";
   const timestamp = new Date().toISOString();
 
   return `# Client Intake Brief
@@ -13,11 +27,23 @@ function buildBrief(parsedEmail, claudeAnalysis, driveResult, client) {
 **From:** ${from}
 **Date:** ${date}
 **Subject:** ${subject}
-**Drive Folder:** ${subfolderUrl}
+**Email Archive:** ${archiveUrl}
+**Gmail Thread:** ${gmailThreadUrl}
 
 ---
 
 ${claudeAnalysis}
+
+---
+
+## Reply Metadata
+
+<!-- Used by the Claude draft-reply skill. Do not edit by hand. -->
+
+- **Gmail Message ID:** ${gmailMessageId}
+- **Gmail Thread ID:** ${gmailThreadId}
+- **Reply To:** ${replyTo}
+- **Original Subject:** ${subject}
 
 ---
 

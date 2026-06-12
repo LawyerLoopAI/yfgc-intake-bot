@@ -13,6 +13,35 @@ const { buildBrief } = require("../output/briefBuilder");
 const { saveBriefToDrive } = require("../output/driveDeposit");
 const { sendNotification } = require("../output/notify");
 
+function sanitizeForFilename(name) {
+  if (!name) return "";
+  return name
+    .replace(/[\\/:*?"<>|\r\n\t]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatDateOnly(rawDate) {
+  if (rawDate) {
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      try {
+        return d.toLocaleDateString("en-CA");
+      } catch (_) {
+        return d.toISOString().slice(0, 10);
+      }
+    }
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
+function buildBriefFilename(parsedEmail) {
+  const datePrefix = formatDateOnly(parsedEmail && parsedEmail.date);
+  const subject = sanitizeForFilename((parsedEmail && parsedEmail.subject) || "(no subject)");
+  const trimmedSubject = subject.length > 60 ? subject.slice(0, 60).trim() : subject;
+  return `${datePrefix} — ${trimmedSubject} — intake-brief.md`;
+}
+
 function isAuthorized(req) {
   const expected = process.env.CRON_SECRET;
   const header =
@@ -68,15 +97,21 @@ async function processOneEmail(authClient, client, messageId) {
       }`
     );
 
-    console.log(`  ? Uploading email + attachments to Drive`);
+    const archiveFolderId = process.env.EMAIL_ARCHIVE_FOLDER_ID;
+    if (!archiveFolderId) {
+      throw new Error("EMAIL_ARCHIVE_FOLDER_ID env var is not set");
+    }
+
+    console.log(`  ? Uploading email + attachments to archive folder`);
     const driveResult = await uploadEmailToDrive(
       authClient,
       parsed,
-      client.driveFolderId
+      archiveFolderId,
+      client.clientName
     );
     result.driveFolderUrl = driveResult.subfolderUrl;
     console.log(
-      `    uploaded ${driveResult.uploadedFiles.length} file(s) into subfolder`
+      `    uploaded ${driveResult.uploadedFiles.length} file(s) into archive subfolder`
     );
 
     console.log(`  ? Calling Claude for triage analysis`);
@@ -85,11 +120,13 @@ async function processOneEmail(authClient, client, messageId) {
     console.log(`  ? Building intake brief`);
     const brief = buildBrief(parsed, analysis, driveResult, client);
 
-    console.log(`  ? Saving brief to Drive`);
+    console.log(`  ? Saving brief to client Drive folder`);
+    const briefFilename = buildBriefFilename(parsed);
     const briefUrl = await saveBriefToDrive(
       authClient,
       brief,
-      driveResult.subfolderId
+      client.driveFolderId,
+      briefFilename
     );
     result.briefUrl = briefUrl;
 

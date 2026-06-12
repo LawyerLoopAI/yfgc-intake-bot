@@ -145,6 +145,8 @@ async function parseMessage(authClient, messageId) {
   }
 
   return {
+    messageId,
+    threadId: res.data.threadId,
     subject,
     from,
     date,

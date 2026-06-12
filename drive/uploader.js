@@ -65,15 +65,18 @@ async function uploadFile(drive, subfolderId, filename, mimeType, buffer) {
   return res.data;
 }
 
-async function uploadEmailToDrive(authClient, parsedEmail, driveFolderId) {
+async function uploadEmailToDrive(authClient, parsedEmail, archiveFolderId, clientName) {
   const drive = google.drive({ version: "v3", auth: authClient });
 
   const datePrefix = formatDate(parsedEmail.date);
   const subjectClean = sanitizeName(parsedEmail.subject || "(no subject)");
-  const rawFolderName = `${datePrefix} — ${subjectClean}`;
+  const clientPart = sanitizeName(clientName || "");
+  const rawFolderName = clientPart
+    ? `${datePrefix} — ${clientPart} — ${subjectClean}`
+    : `${datePrefix} — ${subjectClean}`;
   const folderName = truncate(rawFolderName, 100);
 
-  const subfolder = await createSubfolder(drive, driveFolderId, folderName);
+  const subfolder = await createSubfolder(drive, archiveFolderId, folderName);
   const subfolderId = subfolder.id;
   const subfolderUrl = subfolder.webViewLink;
 
