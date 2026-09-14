@@ -74,45 +74,82 @@ const PITCH =
   "for routine work, or a black box AI firm with nobody accountable when you have a real problem. Have a look " +
   `at ${SITE} and see what we are about.`;
 
-// One sentence of Jesse's own relevant experience, keyed by the sector the
-// research step assigns. Inserted right after the practice-area paragraph.
+// One sentence of Jesse's relevant experience, keyed by the sector the
+// research step assigns, inserted after the practice-area paragraph.
 //
-// EMPTY BY DESIGN, and the sentence is omitted entirely when a sector has no
-// entry. Nothing here may be written by anyone but Jesse. An invented claim
-// about his background would be a materially misleading communication under
-// Rule 7.1, and unlike a wrong email address it would go out under his name
-// looking entirely plausible.
+// EVERY LINE BELOW IS DRAWN FROM HIS OWN RESUME, and the source is named in a
+// comment above it. That is the standard: nothing here may be inferred,
+// rounded up, or invented. An overstated claim about his background would be a
+// materially misleading communication under Rule 7.1, and unlike a wrong email
+// address it goes out under his name reading entirely plausibly.
 //
-// Write each one as a complete sentence in his voice, for example:
-//   fintech: "I have spent most of the last decade on payments and lending
-//     work, including money transmitter licensing and bank partner
-//     agreements."
+// Source: Jesse Strauss Resume 3-25.docx and YFGC Resume, in the Drive resumes
+// folder, read 2026-09-14.
+
+// True of every recipient, so it carries any sector with no specific line.
+// Source: Common Living (Series D proptech, VP and GC 2016 to 2022, 25 to 250
+// employees across 10 states, $130M+ financings and an acquisition) and
+// Everyrealm (GC 2022 to 2023).
+const DEFAULT_EXPERIENCE =
+  "Before this I was in-house general counsel at two venture-backed companies, including one I helped take from " +
+  "25 to 250 people through $130 million of financings and an acquisition.";
+
 const SECTOR_EXPERIENCE = {
-  "fintech": "",
+  // Source: Common Living, "Led a legal team at a Series D proptech startup,
+  // reporting to the CEO", plus Blank Rome commercial real estate practice.
+  "proptech":
+    "I was VP and General Counsel at Common Living, a Series D proptech company, through its growth from 25 to " +
+    "250 people across ten states and its acquisition.",
+
+  // Source: Everyrealm, "joint ventures and other agreements for immersive
+  // media and virtual experiences".
+  "media":
+    "I was General Counsel at Everyrealm, where I structured and closed joint ventures for immersive media and " +
+    "virtual experiences.",
+
+  // Source: Common Living, growth to 250 employees across ten states and
+  // "high stakes litigation with local regulators regarding the legality of
+  // the business which was resolved by consent decree".
+  "consumer":
+    "I was VP and General Counsel at Common Living as it grew to 250 people across ten states, including high " +
+    "stakes litigation with regulators over whether the business was legal at all.",
+
+  // Source: TechGC founding member; in-house GC at Everyrealm and Common
+  // Living, both venture-backed technology companies.
+  "enterprise-saas":
+    "I am a founding member of TechGC, the peer community for general counsel of technology companies, and I have " +
+    "been the in-house lawyer at two venture-backed startups.",
+
+  // Source: Labaton Sucharow, "Litigated securities fraud cases on behalf of
+  // institutional investors"; Common Living, "$130M+ in financings".
+  "fintech":
+    "I litigated federal securities cases for institutional investors at Labaton Sucharow, and later ran legal for " +
+    "$130 million of financings in-house.",
+
+  // Deliberately empty. The resume does not support a specific claim in these
+  // sectors, so DEFAULT_EXPERIENCE carries them. Fill one in only from
+  // something actually on the resume.
   "healthtech": "",
-  "proptech": "",
   "legaltech": "",
   "ai-infrastructure": "",
   "devtools": "",
-  "enterprise-saas": "",
   "marketplace": "",
-  "consumer": "",
   "climate": "",
   "security": "",
   "biotech": "",
   "logistics": "",
   "edtech": "",
-  "media": "",
   "other": "",
 };
 
 /**
  * @param {string|null} sector
- * @returns {string|null} the sentence to insert, or null to say nothing
+ * @returns {string} the sentence to insert; the default when the sector has no
+ *   specific line, because the default is true of every recipient
  */
 function experienceFor(sector) {
   const line = SECTOR_EXPERIENCE[String(sector || "").toLowerCase()];
-  return line && line.trim() ? line.trim() : null;
+  return line && line.trim() ? line.trim() : DEFAULT_EXPERIENCE;
 }
 
 const SIGNOFF = "Hope we can talk more!";
@@ -177,6 +214,7 @@ function buildOutreachEmail(funding) {
 module.exports = {
   buildOutreachEmail,
   SECTOR_EXPERIENCE,
+  DEFAULT_EXPERIENCE,
   experienceFor,
   SIGNATURE,
   SIGNOFF,

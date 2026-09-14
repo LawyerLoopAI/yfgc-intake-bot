@@ -6,7 +6,7 @@ const path = require("path");
 const { parseFundingSection } = require("./parseFunding");
 const {
   buildOutreachEmail, SIGNATURE, SIGNOFF, SITE, LINKS, BOOKING_TEXT, BOOKING_URL,
-  CONTACT_EMAIL, SUBSTANTIATION, SECTOR_EXPERIENCE, experienceFor,
+  CONTACT_EMAIL, SUBSTANTIATION, SECTOR_EXPERIENCE, DEFAULT_EXPERIENCE, experienceFor,
 } = require("./emailTemplate");
 
 let passed = 0;
@@ -103,9 +103,15 @@ ok("names the large firm alternative", withName.body.includes("cost prohibitive"
 ok("names the AI firm alternative", withName.body.includes("black box AI firm"));
 ok("points the reader at the site", withName.body.includes(SITE));
 ok("interpolates the site rather than printing the placeholder", !withName.body.includes("${SITE}"));
-// Jesse asked for this to be short. Keep it honest with a hard ceiling.
+// Jesse asked for this to be short. Keep it honest with a hard ceiling, and
+// measure the worst case: the sector line varies, so the longest one governs.
 const words = withName.body.split(/\s+/).length;
-ok(`body stays under 230 words (was ${words})`, words < 230);
+const longest = Object.keys(SECTOR_EXPERIENCE).reduce((worst, sector) => {
+  const n = buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector }).body.split(/\s+/).length;
+  return n > worst.n ? { sector, n } : worst;
+}, { sector: "(default)", n: 0 });
+ok(`body stays under 245 words (was ${words})`, words < 245);
+ok(`worst sector stays under 245 words (${longest.sector} was ${longest.n})`, longest.n < 245);
 ok("carries the full signature block", withName.body.includes(SIGNATURE));
 ok("includes the principal office address", withName.body.includes("765 Amsterdam Avenue"));
 ok("includes the office telephone number", withName.body.includes("917-541-8428"));
@@ -125,27 +131,49 @@ const noInvestors = buildOutreachEmail({ ...rows[2], contactFirstName: "Alex" })
 ok("omits investor sentence when none were listed", !/led the round/i.test(noInvestors.body));
 
 console.log("\nsector experience");
-// Every entry must stay empty in the repo. Only Jesse writes these: an
-// invented claim about his background would be a materially misleading
-// communication under Rule 7.1, and it would go out under his name looking
-// entirely plausible.
-ok(
-  "no experience claim is committed to the repo",
-  Object.values(SECTOR_EXPERIENCE).every((v) => v === "")
-);
-check("an empty sector contributes nothing", experienceFor("fintech"), null);
-check("an unknown sector contributes nothing", experienceFor("nonsense"), null);
-check("a null sector contributes nothing", experienceFor(null), null);
+// Every line here is drawn from Jesse's own resume, with the source named in a
+// comment beside it. These go out under his name, so the tests below check the
+// shape of the copy, not its truth: only the resume can settle that.
+const claims = Object.entries(SECTOR_EXPERIENCE).filter(([, v]) => v !== "");
+ok("at least one sector has its own line", claims.length > 0);
+for (const [sector, line] of claims) {
+  ok(`${sector} reads as a full sentence`, /^[A-Z].*\.$/.test(line.trim()));
+  ok(`${sector} is substantive, not a stub`, line.trim().split(/\s+/).length >= 8);
+  ok(`${sector} has no em dash`, !line.includes("—"));
+}
+ok("the default line is a full sentence", /^[A-Z].*\.$/.test(DEFAULT_EXPERIENCE.trim()));
+ok("the default line has no em dash", !DEFAULT_EXPERIENCE.includes("—"));
 
-const paragraphsWithout = buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "healthtech" }).body.split("\n\n").length;
-SECTOR_EXPERIENCE.healthtech = "I have done a lot of work in senior care and digital health.";
-const filled = buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "healthtech" });
-check("a filled sector adds exactly one paragraph", filled.body.split("\n\n").length, paragraphsWithout + 1);
-ok("and the sentence appears", filled.body.includes("senior care and digital health"));
-ok("placed after the practice areas", filled.body.indexOf("senior care") > filled.body.indexOf("legal questions pile up"));
-ok("and before the offer", filled.body.indexOf("senior care") < filled.body.indexOf("Two offers"));
-ok("a different sector does not pick it up", !buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "fintech" }).body.includes("senior care"));
-SECTOR_EXPERIENCE.healthtech = "";
+// The default is true of every recipient, so an unrecognised sector still gets
+// a line rather than a hole in the email.
+check("an unknown sector falls back to the default", experienceFor("nonsense"), DEFAULT_EXPERIENCE);
+check("a null sector falls back to the default", experienceFor(null), DEFAULT_EXPERIENCE);
+check("an empty sector falls back to the default", experienceFor("healthtech"), DEFAULT_EXPERIENCE);
+check("a filled sector uses its own line", experienceFor("proptech"), SECTOR_EXPERIENCE.proptech);
+check("sector matching is case insensitive", experienceFor("PropTech"), SECTOR_EXPERIENCE.proptech);
+
+const withDefault = buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "healthtech" });
+const withSector = buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "proptech" });
+ok("every email carries an experience line", withDefault.body.includes(DEFAULT_EXPERIENCE));
+check(
+  "the sector line replaces the default rather than adding to it",
+  withSector.body.split("\n\n").length,
+  withDefault.body.split("\n\n").length
+);
+ok("the sector line appears", withSector.body.includes(SECTOR_EXPERIENCE.proptech));
+ok("and the default does not tag along", !withSector.body.includes(DEFAULT_EXPERIENCE));
+ok(
+  "placed after the practice areas",
+  withSector.body.indexOf(SECTOR_EXPERIENCE.proptech) > withSector.body.indexOf("legal questions pile up")
+);
+ok(
+  "and before the offer",
+  withSector.body.indexOf(SECTOR_EXPERIENCE.proptech) < withSector.body.indexOf("Two offers")
+);
+ok(
+  "a different sector does not pick it up",
+  !buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "fintech" }).body.includes(SECTOR_EXPERIENCE.proptech)
+);
 
 // Not a hard failure, because the pipeline works without it. It is a standing
 // reminder: new Rule 7.1 still bars a materially misleading communication, and

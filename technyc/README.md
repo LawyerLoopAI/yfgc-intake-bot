@@ -295,10 +295,17 @@ company, about five a day.
 
 `SECTOR_EXPERIENCE` in `emailTemplate.js` holds one sentence of Jesse's own
 relevant experience per sector, inserted after the practice-area paragraph. The
-research step classifies each company; a sector with no entry contributes
-nothing and the email is unchanged.
+research step classifies each company into one of the sectors in `research.js`.
 
-**Every entry ships empty, and a test enforces that.** Only Jesse writes these.
-An invented claim about his background would be a materially misleading
-communication under Rule 7.1, and unlike a wrong email address it would go out
-under his name looking entirely plausible.
+`DEFAULT_EXPERIENCE` covers every sector with no entry of its own, so each email
+carries exactly one experience sentence and there is never a hole in the copy.
+Filled today: proptech, media, consumer, enterprise-saas, fintech. The rest fall
+back to the default.
+
+**Every line is drawn from Jesse's resume, and the source is named in a comment
+beside it.** That is the standard: nothing may be inferred, rounded up, or
+invented. An overstated claim about his background would be a materially
+misleading communication under Rule 7.1, and unlike a wrong email address it
+would go out under his name reading entirely plausibly. The tests check the
+shape of each line (a full sentence, substantive, no em dash) and that the
+fallback works; only the resume can settle whether a line is true.
