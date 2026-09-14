@@ -29,7 +29,8 @@ summary to Jesse.
 | Summary subject shape | `TechNYC outreach: N drafts ready (Month D)` |
 | Repo helpers | `technyc/parseFunding.js`, `technyc/emailTemplate.js` |
 
-Digests arrive most weekdays around 5:45pm ET. Friday round-up editions often
+Digests arrive most weekdays around 5:45pm ET, and the scheduled run fires at
+7pm ET, so it works that same evening's issue. Friday round-up editions often
 have no funding section at all, which is a normal empty run.
 
 ---
