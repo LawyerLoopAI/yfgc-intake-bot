@@ -190,9 +190,18 @@ skip in the summary.
 
 Then `Gmail: create_draft` with:
 
-- `to`: `[verified address]`, or omit entirely when there is none
+- `to`: `[the address from Step 4]`, or omit entirely when there is none
 - `subject`: from the template
-- `body`: from the template
+- `body`: the template text, plain
+- `htmlBody`: the same text with `<br>` line breaks and the site as a real
+  anchor, `<a href="https://yfgc.ai">yfgc.ai</a>`
+
+**Always send `htmlBody`, not `body` alone.** Gmail linkifies a bare domain in
+a plain-text draft and writes its own redirect into the saved body, so the
+recipient sees `https://www.google.com/url?q=...` where the site name should
+be. Gmail still rewrites the anchor's `href` on save, which cannot be
+prevented from the API, but with an anchor the visible link text stays
+`yfgc.ai`.
 
 Do not hand-edit the body per company beyond what the template already
 personalizes. The template is the reviewed copy; drift across drafts is how an
