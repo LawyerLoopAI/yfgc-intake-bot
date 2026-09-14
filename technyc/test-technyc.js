@@ -209,15 +209,28 @@ findEmail({
   });
 }).then((r) => {
   check("constructs from a repeated pattern", [r.email, r.confidence], ["jane.doe@acme.com", "pattern"]);
-  ok("says the address was constructed", /constructed as first\.last/.test(r.notes.join(" ")));
+  ok("says the address was constructed", /built as first\.last/.test(r.notes.join(" ")));
 
   return findEmail({
     website: "https://acme.com/",
     personName: "Jane Doe",
-    fetchImpl: fakeSite({ "/contact": "press@acme.com" }),
+    fetchImpl: fakeSite({ "/contact": "press@acme.com privacy@acme.com" }),
   });
 }).then((r) => {
-  check("falls back to a shared inbox", [r.email, r.confidence], ["press@acme.com", "role"]);
+  // The bug Jesse caught: a privacy alias scraped off a policy page was being
+  // put in the To: line. A generic inbox is the wrong answer, not a weak one.
+  check("never returns a generic inbox", [r.email, r.confidence], [null, null]);
+  ok("says which generic inboxes it rejected", /only generic inboxes/.test(r.notes.join(" ")));
+  check("reports them as rejected", r.rejected.sort(), ["press@acme.com", "privacy@acme.com"]);
+
+  return findEmail({
+    website: "https://acme.com/",
+    personName: "Jane Doe",
+    fetchImpl: fakeSite({ "/contact": "sam.smith@acme.com" }),
+  });
+}).then((r) => {
+  check("one colleague is not a convention", [r.email, r.confidence], [null, null]);
+  ok("explains that one sample is too few", /too few to infer/.test(r.notes.join(" ")));
 
   return findEmail({
     website: "https://acme.com/",
@@ -227,6 +240,20 @@ findEmail({
 }).then((r) => {
   check("returns nothing rather than guessing", [r.email, r.confidence], [null, null]);
   ok("explains why", r.notes.length > 0);
+
+  // Privacy, terms and legal pages publish compliance inboxes and nothing
+  // else, so they are no longer swept at all.
+  const { CANDIDATE_PATHS } = require("./findEmail");
+  ok("does not sweep the privacy page", !CANDIDATE_PATHS.includes("/privacy"));
+  ok("does not sweep the terms page", !CANDIDATE_PATHS.includes("/terms"));
+  ok("still sweeps the team page", CANDIDATE_PATHS.includes("/team"));
+
+  const { IDENTIFY_SYSTEM, EMAIL_SYSTEM } = require("./research");
+  ok("identification is its own stage", /no CEO/.test(IDENTIFY_SYSTEM));
+  ok("finding the address is its own stage", /direct work email address of one named person/.test(EMAIL_SYSTEM));
+  ok("the email stage names the inboxes to reject", /privacy@/.test(EMAIL_SYSTEM) && /info@/.test(EMAIL_SYSTEM));
+  ok("the email stage forbids guessing a pattern", /at least two real addresses/.test(EMAIL_SYSTEM));
+  ok("the email stage points at EDGAR and GitHub", /EDGAR/.test(EMAIL_SYSTEM) && /GitHub/.test(EMAIL_SYSTEM));
 
   return findEmail({
     website: "https://acme.com/",
@@ -378,7 +405,7 @@ const summary = buildSummary({
 });
 ok("separates ready from needs-an-address", summary.indexOf("READY TO SEND") < summary.indexOf("NEEDS AN ADDRESS"));
 ok("shows the verified address", summary.includes("alex@inspiren.com (verified)"));
-ok("flags the empty To: line", summary.includes("no address found"));
+ok("flags the empty To: line", summary.includes("no address for this person"));
 ok("lists skips with a reason", summary.includes("Sequen: already drafted or sent"));
 
 // A run that finishes an earlier addressless draft should say so, otherwise

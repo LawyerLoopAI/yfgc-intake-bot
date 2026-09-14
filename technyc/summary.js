@@ -14,7 +14,10 @@ function describe(row, contact, draftId, completed) {
   if (contact.email) {
     bits.push(`  ${contact.email} (${contact.emailConfidence || "unlabeled"})`);
   } else {
-    bits.push("  no address found, To: line is empty");
+    bits.push("  no address for this person, To: line is empty");
+  }
+  if (!contact.email && contact.searched && contact.searched.length) {
+    bits.push(`  searched: ${contact.searched.slice(0, 4).join(" , ")}`);
   }
   if (contact.otherLeaders && contact.otherLeaders.length) {
     bits.push(`  also at the company: ${contact.otherLeaders.join(", ")}`);
@@ -68,7 +71,7 @@ function buildSummary(outcome) {
   }
 
   lines.push(
-    "Addresses marked verified were read off a page. Marked pattern means built from a shape seen at least twice at that domain, so worth a glance. Marked role means a shared inbox with the person named in the greeting.",
+    "Verified means the address was read off a page and matches the person's name. Pattern means it was built from a shape seen on at least two other real addresses at that domain, so worth a glance before sending. Generic inboxes such as info@ and privacy@ are never used: an empty To: line means nothing belonging to that person was found.",
     "",
     "Sent by the TechNYC outreach pipeline. Drafts only, never sent to a prospect."
   );

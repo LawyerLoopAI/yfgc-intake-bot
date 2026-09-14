@@ -112,21 +112,39 @@ Two practical rules the pipeline still enforces itself:
 
 ## Finding the address
 
-`findEmail.js` reads the company's home page plus its contact, about, team,
-leadership, press, privacy and terms pages, keeps only addresses at the
-company's own domain, and returns one of four confidences:
+**The rule: an address counts only if it maps to the named person.** A generic
+company inbox is not a weaker answer, it is the wrong answer. Mailing a
+founder's `privacy@` alias to congratulate them on a raise is worse than
+sending nothing.
 
-| Confidence | Meaning | Goes in the To: line? |
+Three sources, in order:
+
+1. **Identify the person** (`research.js`, stage one). CEO, or the founder only
+   where there is no CEO.
+2. **Search for that person's address** (`research.js`, stage two). A separate
+   call with its own search budget, because folded into stage one the model
+   treats the address as an afterthought and settles for the first inbox it
+   sees. It is pointed at the places a real address actually appears: staff
+   listings, the funding press release contact when it names this person, SEC
+   EDGAR filings, GitHub commit authorship, personal sites and newsletters,
+   speaker bios and alumni pages.
+3. **Sweep the company's own pages** (`findEmail.js`). Deterministic, and a
+   name-matching hit here outranks anything softer.
+
+| Confidence | Meaning | Used? |
 |---|---|---|
 | `verified` | Read off a page, and the local part matches the person's name | Yes |
-| `pattern` | Built from their name using an address shape seen at least twice at that domain | Yes, labeled as inferred |
-| `role` | A real published shared inbox such as `press@` | Yes, labeled, person named in the salutation |
-| `null` | Nothing found | No. Empty To: line, never a placeholder |
+| `pattern` | Built from their name using a shape seen on at least two OTHER real addresses at that domain | Yes, labeled so it gets a glance |
+| none | Nothing belonging to this person | No. Empty To: line, and the summary says what was tried |
 
-The rule that does not bend is that a guessed address is never presented as a
-found one. One sample is never a pattern, and a shape never seen at the domain
-is never invented. Everything else is fair game, because a draft addressed to
-nobody is a draft Jesse has to finish by hand.
+`info@`, `hello@`, `press@`, `privacy@`, `legal@` and the rest are rejected
+outright at every stage, and the summary names the ones it turned down. One
+real address at a domain is never a pattern, and a shape never seen at that
+domain is never invented.
+
+The sweep does not read privacy, terms or legal pages at all. They publish
+compliance inboxes and nothing else, so they cost time and supply exactly the
+kind of address that gets rejected.
 
 ### Why this runs on Vercel and not in a Claude Code session
 

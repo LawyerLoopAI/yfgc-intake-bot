@@ -17,25 +17,43 @@ const WEB_SEARCH_TOOL = {
   max_uses: 10,
 };
 
-const SYSTEM = `You research the leadership of newly funded startups so a lawyer can send a congratulations note.
+// Stage one: who is this note addressed to.
+const IDENTIFY_SYSTEM = `You identify who runs a newly funded startup, so a lawyer can address a congratulations note correctly.
 
-Two jobs, in order of importance.
+Find the CEO. Only if the company genuinely has no CEO, find the founder, or the senior-most of several co-founders. Founder and CEO are often different people and getting this wrong is the most visible way to fail, so check the title rather than assuming the founder runs the company.
 
-1. Identify who to address. The CEO. Only if the company has no CEO, the founder, or the senior-most of several co-founders. Founder and CEO are often different people, and getting this wrong is the most visible way to fail, so check the title rather than assuming the founder runs the company.
-
-2. Find that person's email address. This is the part that matters most. Try the company site including its contact, about, team, press, privacy policy and terms pages, the funding press release's media contact block, SEC EDGAR Form D filings, the person's own writing and conference speaker bios, and their public profiles.
-
-Rules you do not break:
-- Never invent a name, a title, or an email address.
-- Report an address as verified only if you actually saw it written somewhere. Say where.
-- Never construct an address from a guessed pattern. If you saw at least two real addresses at that domain sharing a shape, applying that shape is an inference, not a guess: report it with confidence "pattern" and name the addresses it is based on.
-- A shared inbox such as press@ or hello@ is a legitimate fallback. Report it with confidence "role".
-- If you find nothing, say so. An honest blank beats a plausible fabrication.
+Never invent a name or a title. If you cannot establish who it is, say so.
 
 Reply with a single JSON object and nothing else:
-{"fullName": string|null, "firstName": string|null, "title": string|null, "isCeo": boolean, "otherLeaders": string[], "email": string|null, "emailConfidence": "verified"|"pattern"|"role"|null, "sources": string[], "notes": string}
+{"fullName": string|null, "firstName": string|null, "title": string|null, "isCeo": boolean, "otherLeaders": string[], "sources": string[], "notes": string}`;
 
-"sources" are URLs you actually read. "notes" is one or two sentences for the lawyer: what you could not find, and where a human should look next.`;
+// Stage two: find that specific person's address. Separated from stage one on
+// purpose. Folded together, the model treats the address as an afterthought
+// and settles for whatever inbox it saw first.
+const EMAIL_SYSTEM = `You find the direct work email address of one named person. Nothing else.
+
+THE ONLY ACCEPTABLE ANSWER is an address that belongs to that person. A generic company inbox is not a weaker answer, it is the wrong answer. Reject every one of these outright, no matter how prominently the site displays it: info@, hello@, hi@, contact@, support@, help@, team@, press@, pr@, media@, sales@, careers@, jobs@, legal@, privacy@, security@, admin@, partners@, ir@, investors@, billing@, noreply@. If the only thing you can find is one of those, the answer is null.
+
+Search hard before giving up. Places a person's real address actually turns up:
+- The company's team, about, leadership or contact page, where staff are listed individually.
+- The funding press release. Use the contact only if it names this person; a PR agency's address is not theirs.
+- SEC EDGAR. A company that just raised has very likely filed a Form D, and the filing carries contact details.
+- GitHub. For a technical founder, the author address on their public commits is a real address.
+- Their own writing: personal site, blog, Substack, newsletter footer.
+- Conference speaker bios, podcast show notes, university and alumni pages, professional directories.
+- Their public profiles and any link tree those point to.
+
+Try several distinct searches, including the person's name paired with the company domain, and the name paired with the word email or contact.
+
+Rules you do not break:
+- Never invent an address, and never guess at a pattern like first.last purely because it is common. Constructing an address is allowed ONLY when you have seen at least two real addresses at that same domain sharing one shape; then report confidence "pattern" and name the two addresses you based it on.
+- An address you actually read somewhere is confidence "verified". Say where you read it.
+- An honest null beats a plausible fabrication. This lawyer would rather add an address by hand than send mail to the wrong person.
+
+Reply with a single JSON object and nothing else:
+{"email": string|null, "emailConfidence": "verified"|"pattern"|null, "sources": string[], "searched": string[], "notes": string}
+
+"searched" lists what you actually tried, so a human knows where to pick up. "notes" says in one or two sentences what you found and what you ruled out.`;
 
 /**
  * Pull the first JSON object out of a model response.
@@ -75,6 +93,30 @@ function collectText(content) {
  * @param {object} [deps] injection points for tests
  * @returns {Promise<object>} contact details, always an object, never a throw
  */
+async function askForJson(client, system, prompt, maxUses) {
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 16000,
+    system,
+    thinking: { type: "adaptive" },
+    output_config: { effort: "high" },
+    tools: [{ ...WEB_SEARCH_TOOL, max_uses: maxUses }],
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  if (response.stop_reason === "refusal") {
+    const category = (response.stop_details && response.stop_details.category) || "unknown";
+    return { parsed: null, error: `model declined: ${category}` };
+  }
+  const parsed = extractJson(collectText(response.content));
+  return { parsed, error: parsed ? null : "could not parse a JSON object from the reply" };
+}
+
+/**
+ * @param {object} funding a record from parseFundingSection
+ * @param {object} [deps] injection points for tests
+ * @returns {Promise<object>} contact details, always an object, never a throw
+ */
 async function researchContact(funding, deps = {}) {
   const deadline = deps.deadline || null;
   // Required lazily, like googleapis in gmailDraft.js, so the pure helpers
@@ -85,79 +127,87 @@ async function researchContact(funding, deps = {}) {
   const { company, website, description, amountText, round } = funding;
   const raise = [amountText, round].filter(Boolean).join(" ");
 
-  const prompt = [
-    `Company: ${company}`,
-    website ? `Website: ${website}` : null,
-    description ? `Described as: ${description}` : null,
-    raise ? `Just raised: ${raise}` : null,
-    "",
-    "Find the CEO, or the founder if there is no CEO, and their email address.",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  let parsed = null;
-  let researchError = null;
-
-  try {
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 16000,
-      system: SYSTEM,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "high" },
-      tools: [WEB_SEARCH_TOOL],
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    // Safety classifiers can decline; content is meaningless when they do.
-    if (response.stop_reason === "refusal") {
-      researchError = `model declined: ${
-        (response.stop_details && response.stop_details.category) || "unknown"
-      }`;
-    } else {
-      parsed = extractJson(collectText(response.content));
-      if (!parsed) researchError = "could not parse a JSON object from the research reply";
-    }
-  } catch (err) {
-    researchError = `research call failed: ${err.message}`;
-  }
-
   const result = {
     company,
-    fullName: (parsed && parsed.fullName) || null,
-    firstName: (parsed && parsed.firstName) || null,
-    title: (parsed && parsed.title) || null,
-    isCeo: !!(parsed && parsed.isCeo),
-    otherLeaders: (parsed && parsed.otherLeaders) || [],
-    email: (parsed && parsed.email) || null,
-    emailConfidence: (parsed && parsed.emailConfidence) || null,
-    sources: (parsed && parsed.sources) || [],
-    notes: (parsed && parsed.notes) || "",
-    errors: researchError ? [researchError] : [],
+    fullName: null, firstName: null, title: null, isCeo: false, otherLeaders: [],
+    email: null, emailConfidence: null, sources: [], searched: [], notes: "", errors: [],
   };
 
-  // Second pass at the address. The site sweep is deterministic and reads the
-  // pages the model may have skimmed, so it can beat the model's own answer:
-  // a verified hit here replaces anything softer, and it fills a blank.
-  if (result.fullName && website && fetchImpl) {
+  // Stage 1: who.
+  const who = await askForJson(
+    client,
+    IDENTIFY_SYSTEM,
+    [
+      `Company: ${company}`,
+      website ? `Website: ${website}` : null,
+      description ? `Described as: ${description}` : null,
+      raise ? `Just raised: ${raise}` : null,
+      "",
+      "Who is the CEO? If there is no CEO, who is the founder?",
+    ].filter(Boolean).join("\n"),
+    6
+  );
+  if (who.error) result.errors.push(who.error);
+  if (who.parsed) {
+    Object.assign(result, {
+      fullName: who.parsed.fullName || null,
+      firstName: who.parsed.firstName || null,
+      title: who.parsed.title || null,
+      isCeo: !!who.parsed.isCeo,
+      otherLeaders: who.parsed.otherLeaders || [],
+      sources: who.parsed.sources || [],
+      notes: who.parsed.notes || "",
+    });
+  }
+
+  if (!result.fullName) {
+    result.notes = [result.notes, "No person identified, so no address was sought."].filter(Boolean).join(" ");
+    return result;
+  }
+
+  // Stage 2: that person's address, as its own search with its own budget.
+  if (!deadline || Date.now() < deadline) {
+    const mail = await askForJson(
+      client,
+      EMAIL_SYSTEM,
+      [
+        `Person: ${result.fullName}`,
+        result.title ? `Title: ${result.title}` : null,
+        `Company: ${company}`,
+        website ? `Company website: ${website}` : null,
+        "",
+        `Find ${result.fullName}'s own work email address.`,
+      ].filter(Boolean).join("\n"),
+      12
+    );
+    if (mail.error) result.errors.push(mail.error);
+    if (mail.parsed) {
+      const confidence = mail.parsed.emailConfidence;
+      if (mail.parsed.email && (confidence === "verified" || confidence === "pattern")) {
+        result.email = mail.parsed.email;
+        result.emailConfidence = confidence;
+      }
+      result.sources = [...new Set([...result.sources, ...(mail.parsed.sources || [])])];
+      result.searched = mail.parsed.searched || [];
+      if (mail.parsed.notes) result.notes = [result.notes, mail.parsed.notes].filter(Boolean).join(" ");
+    }
+  }
+
+  // Stage 3: the deterministic site sweep. It reads pages the model may have
+  // skimmed, so a name-matching hit here outranks anything softer.
+  if (website && fetchImpl) {
     try {
-      const sweep = await findEmail({
-        website,
-        personName: result.fullName,
-        fetchImpl,
-        deadline,
-      });
+      const sweep = await findEmail({ website, personName: result.fullName, fetchImpl, deadline });
       const beatsCurrent =
         sweep.email &&
-        (!result.email ||
-          (sweep.confidence === "verified" && result.emailConfidence !== "verified"));
-
+        (!result.email || (sweep.confidence === "verified" && result.emailConfidence !== "verified"));
       if (beatsCurrent) {
         result.email = sweep.email;
         result.emailConfidence = sweep.confidence;
-        result.sources = [...new Set([...result.sources, ...sweep.evidence])];
-        if (sweep.notes.length) result.notes = [result.notes, ...sweep.notes].filter(Boolean).join(" ");
+      }
+      if (sweep.evidence.length) result.sources = [...new Set([...result.sources, ...sweep.evidence])];
+      if (!result.email && sweep.notes.length) {
+        result.notes = [result.notes, ...sweep.notes].filter(Boolean).join(" ");
       }
     } catch (err) {
       result.errors.push(`site sweep failed: ${err.message}`);
@@ -167,4 +217,4 @@ async function researchContact(funding, deps = {}) {
   return result;
 }
 
-module.exports = { researchContact, extractJson, MODEL, WEB_SEARCH_TOOL };
+module.exports = { researchContact, extractJson, MODEL, WEB_SEARCH_TOOL, IDENTIFY_SYSTEM, EMAIL_SYSTEM };
