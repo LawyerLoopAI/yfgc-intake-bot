@@ -228,7 +228,16 @@ unreviewed claim gets into a client-facing email.
 - The pitch text in `emailTemplate.js` is Jesse's, reviewed and approved by him.
   Do not soften it, sharpen it, or add claims of your own.
 
-## Step 6 - Email Jesse the summary
+## Step 6 - Log each company to the tracking sheet
+
+The Vercel pipeline does this automatically via `technyc/tracker.js`. Working
+by hand, add a row per company to **TechNYC Outreach Log** in Drive: date,
+digest, company, amount, round, contact, title, email address, confidence,
+where it was found, status, draft link, website. Correct an existing row rather
+than adding a second one when a company already logged without an address
+finally gets one.
+
+## Step 7 - Email Jesse the summary
 
 `Gmail: send_message` to `jesse@strausslawpllc.com`.
 

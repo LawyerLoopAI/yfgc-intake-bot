@@ -426,10 +426,77 @@ ok("says nothing about filling in for a fresh draft", !summary.includes("filled 
 ok("states nothing was sent", summary.includes("Nothing has been sent."));
 ok("no em dash in the summary", !summary.includes("—"));
 
+  runTrackerSuite();
   runProviderSuite().then(() => {
     console.log(`\n${passed} passed, ${failed} failed`);
     process.exit(failed === 0 ? 0 : 1);
   });
+}
+
+// ---------------------------------------------------------------------------
+
+function runTrackerSuite() {
+  const { buildRow, planWrites, rowKey, columnLetter, HEADERS } = require("./tracker");
+
+  console.log("\ntracker");
+  check("header count matches the last column letter", columnLetter(HEADERS.length), "M");
+
+  const withAddress = buildRow(
+    {
+      row: { company: "Inspiren", amountText: "$70 million", round: "Series C", website: "https://inspiren.com/" },
+      contact: { fullName: "Alex Hejnosz", title: "CEO", email: "alex@inspiren.com", emailConfidence: "verified", emailSource: "hunter" },
+      draftId: "r123",
+    },
+    "September 14",
+    "2026-09-14"
+  );
+  check("row length matches the headers", withAddress.length, HEADERS.length);
+  check("records the company", withAddress[2], "Inspiren");
+  check("records the amount", withAddress[3], "$70 million");
+  check("records the contact", withAddress[5], "Alex Hejnosz");
+  check("records the address", withAddress[7], "alex@inspiren.com");
+  check("records where it came from", withAddress[9], "hunter");
+  // Nothing is sent by this pipeline, so the sheet must not claim otherwise.
+  check("status is honest about drafts", withAddress[10], "Draft ready");
+  ok("links the draft", withAddress[11].includes("r123"));
+
+  const without = buildRow(
+    { row: { company: "Sequen", amountText: "$90 million", round: "Series B" }, contact: { fullName: "Zoe Weil", title: "CEO" }, draftId: "r9" },
+    "September 14",
+    "2026-09-14"
+  );
+  check("status flags a missing address", without[10], "Draft, needs an address");
+  check("leaves the address blank rather than inventing one", without[7], "");
+
+  console.log("\ntracker: upsert");
+  const header = HEADERS;
+  const existingNoAddress = [
+    header,
+    ["2026-09-14", "September 14", "Inspiren", "$70 million", "Series C", "Alex Hejnosz", "CEO", "", "", "", "Draft, needs an address", "", ""],
+  ];
+  // A company logged without an address gets revisited later. When one turns
+  // up the row must be corrected, not duplicated.
+  let plan = planWrites(existingNoAddress, [withAddress]);
+  check("corrects the existing row", plan.updates.map((u) => u.rowNumber), [2]);
+  check("adds nothing new", plan.appends.length, 0);
+  check("the correction carries the address", plan.updates[0].values[7], "alex@inspiren.com");
+
+  plan = planWrites([header], [withAddress, without]);
+  check("appends both when the sheet is empty", plan.appends.length, 2);
+  check("updates nothing", plan.updates.length, 0);
+
+  // The same company raising again in a later digest earns its own row.
+  const laterRound = buildRow(
+    { row: { company: "Inspiren", amountText: "$200 million", round: "Series D" }, contact: { fullName: "Alex Hejnosz", title: "CEO" }, draftId: "rX" },
+    "December 1",
+    "2026-12-01"
+  );
+  plan = planWrites(existingNoAddress, [laterRound]);
+  check("a new digest for the same company is a new row", plan.appends.length, 1);
+  check("and corrects nothing", plan.updates.length, 0);
+
+  check("key is case and space insensitive", rowKey("  Inspiren ", "September 14"), rowKey("inspiren", "september 14"));
+  check("tolerates a blank row", planWrites([header, []], [withAddress]).appends.length, 1);
 }
 
 // ---------------------------------------------------------------------------

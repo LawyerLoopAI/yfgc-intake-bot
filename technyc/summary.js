@@ -36,7 +36,7 @@ function describe(row, contact, draftId, completed) {
   return bits.join("\n");
 }
 
-function buildSummary(outcome) {
+function buildSummary(outcome, tracker) {
   const ready = outcome.drafted.filter((d) => d.contact.email);
   const needsAddress = outcome.drafted.filter((d) => !d.contact.email);
 
@@ -69,6 +69,16 @@ function buildSummary(outcome) {
       lines.push(`${f.company || f.messageId}: ${f.error}`);
     }
     lines.push("");
+  }
+
+  if (tracker && tracker.url) {
+    const counts = [
+      tracker.added ? `${tracker.added} new row${tracker.added === 1 ? "" : "s"}` : null,
+      tracker.updated ? `${tracker.updated} corrected` : null,
+    ].filter(Boolean).join(", ");
+    lines.push(`TRACKING SHEET`, "", `${counts || "no changes"}: ${tracker.url}`, "");
+  } else if (outcome.trackerError) {
+    lines.push("TRACKING SHEET", "", `Could not be updated this run: ${outcome.trackerError}`, "");
   }
 
   lines.push(

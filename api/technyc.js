@@ -14,11 +14,17 @@ const {
   digestDate,
 } = require("../technyc/gmailQuery");
 const { buildSummary } = require("../technyc/summary");
+const { recordRuns, buildRow } = require("../technyc/tracker");
 
 const SOURCE_LABEL_ID = "Label_2387005531655631291"; // "TechNYC Emails"
 const FROM = "Jesse Strauss <jesse@yfgc.ai>";
 const SUMMARY_TO = "jesse@yfgc.ai";
 const LOOKBACK = "7d";
+
+// Drive folder holding the outreach log. The bot creates the sheet inside it
+// on first run; see technyc/tracker.js for why it cannot use one made by hand.
+const TRACKER_FOLDER_ID =
+  process.env.TRACKER_FOLDER_ID || "1Z7SePn8jOA4iwMChfC8JScKxE0lbfPT0";
 
 // Vercel kills the function at maxDuration (set in vercel.json). Stop starting
 // new companies before that so the run finishes cleanly and sends its summary
@@ -202,6 +208,7 @@ async function runPipeline() {
 
         outcome.drafted.push({
           order,
+          digest: digestDate(digest.subject),
           row,
           contact,
           draftId: draft.id,
@@ -244,6 +251,25 @@ module.exports = async (req, res) => {
 
     // A quiet day is not worth an email, but a day with failures is, even when
     // nothing got drafted: silence would look identical to "no digest today".
+    // Log to the tracking sheet before the summary, so the summary can carry
+    // the link. A failure here must not cost Jesse the summary or the drafts,
+    // which are the actual deliverable, so it is reported and swallowed.
+    let tracker = null;
+    if (outcome.drafted.length) {
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        tracker = await recordRuns(
+          authClient,
+          TRACKER_FOLDER_ID,
+          outcome.drafted.map((d) => buildRow(d, d.digest, today))
+        );
+        console.log(`technyc: sheet updated, ${tracker.added} added, ${tracker.updated} corrected`);
+      } catch (err) {
+        console.error("technyc: tracking sheet failed:", err.message);
+        outcome.trackerError = err.message;
+      }
+    }
+
     if (outcome.drafted.length || outcome.failed.length) {
       const date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" });
       await sendSummary(
@@ -251,7 +277,7 @@ module.exports = async (req, res) => {
         `TechNYC outreach: ${outcome.drafted.length} draft${
           outcome.drafted.length === 1 ? "" : "s"
         } ready (${date})`,
-        buildSummary(outcome)
+        buildSummary(outcome, tracker)
       );
     }
 
