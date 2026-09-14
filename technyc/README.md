@@ -58,7 +58,15 @@ node technyc/test-technyc.js
 ## Editing the pitch
 
 All outgoing copy lives in the constants at the top of `emailTemplate.js`:
-`PITCH`, `OFFER`, `PRACTICE_AREAS`, `SIGNATURE`, `SITE`. Change wording there.
+`PITCH`, `OFFER`, `PRACTICE_AREAS`, `SIGNATURE`, `SITE`, `BOOKING_URL`,
+`CONTACT_EMAIL`. Change wording there.
+
+`LINKS` lists everything that should become a real anchor in the HTML part:
+the booking page, the signature address as a `mailto:`, and the site. Order
+matters only as a safety net, because `textToHtml` also guards each match on
+both sides so a domain cannot be linked inside a longer token. Without that
+guard, `jesse@yfgc.ai` in the signature gets chopped into
+`jesse@<a>yfgc.ai</a>` and the address stops working.
 The builder below them only assembles paragraphs and fills in the company
 specifics, so the claims stay in one reviewable place instead of drifting from
 draft to draft.

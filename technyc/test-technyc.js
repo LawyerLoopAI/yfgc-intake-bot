@@ -4,7 +4,10 @@
 const fs = require("fs");
 const path = require("path");
 const { parseFundingSection } = require("./parseFunding");
-const { buildOutreachEmail, SIGNATURE, SIGNOFF, SITE, SUBSTANTIATION } = require("./emailTemplate");
+const {
+  buildOutreachEmail, SIGNATURE, SIGNOFF, SITE, LINKS, BOOKING_TEXT, BOOKING_URL,
+  CONTACT_EMAIL, SUBSTANTIATION,
+} = require("./emailTemplate");
 
 let passed = 0;
 let failed = 0;
@@ -92,6 +95,7 @@ ok("cites where the news came from", withName.body.includes("Tech:NYC Digest"));
 ok("signs off as asked", withName.body.includes(SIGNOFF));
 ok("no stale Best regards sign-off", !withName.body.includes("Best regards"));
 ok("makes the free consultation offer", withName.body.includes("just reply"));
+ok("offers a booking slot", withName.body.includes(BOOKING_TEXT));
 ok("makes the proposal offer", withName.body.includes("ask and I will send one"));
 ok("says both offers are free", withName.body.includes("Two offers, both free"));
 ok("carries the positioning claim", withName.body.includes("preeminent fractional GC service"));
@@ -101,7 +105,7 @@ ok("points the reader at the site", withName.body.includes(SITE));
 ok("interpolates the site rather than printing the placeholder", !withName.body.includes("${SITE}"));
 // Jesse asked for this to be short. Keep it honest with a hard ceiling.
 const words = withName.body.split(/\s+/).length;
-ok(`body stays under 220 words (was ${words})`, words < 220);
+ok(`body stays under 230 words (was ${words})`, words < 230);
 ok("carries the full signature block", withName.body.includes(SIGNATURE));
 ok("includes the principal office address", withName.body.includes("765 Amsterdam Avenue"));
 ok("includes the office telephone number", withName.body.includes("917-541-8428"));
@@ -312,6 +316,18 @@ console.log("\ntextToHtml");
 ok("escapes angle brackets", textToHtml("a < b & c", "").includes("a &lt; b &amp; c"));
 ok("turns newlines into breaks", textToHtml("one\ntwo", "").includes("one<br>two"));
 ok("leaves the text alone when no site is given", !textToHtml("visit yfgc.ai", "").includes("<a "));
+ok("accepts a bare domain as shorthand", textToHtml("visit yfgc.ai", "yfgc.ai").includes('<a href="https://yfgc.ai">yfgc.ai</a>'));
+// The signature carries jesse@yfgc.ai. Without a boundary guard the linker
+// chops it into jesse@<a>yfgc.ai</a>, which breaks the address.
+check("does not match a domain inside a longer token", textToHtml("write to sam@yfgc.ai today", "yfgc.ai"), "<div>write to sam@yfgc.ai today</div>");
+
+const linked = textToHtml(buildOutreachEmail({ company: "Acme", amountText: "$1 million", contactFirstName: "Sam" }).body, LINKS);
+ok("links the site", linked.includes('<a href="https://yfgc.ai">yfgc.ai</a>'));
+ok("links the booking page", linked.includes(`<a href="${BOOKING_URL}">${BOOKING_TEXT}</a>`));
+ok("links the signature address as mailto", linked.includes(`<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`));
+check("emits exactly three anchors", (linked.match(/<a /g) || []).length, 3);
+ok("leaves no placeholder sentinels behind", !linked.includes(String.fromCharCode(57344)));
+ok("does not nest anchors", !/<a [^>]*>[^<]*<a /.test(linked));
 
 console.log("\nbuildSummary");
 const { buildSummary } = require("./summary");

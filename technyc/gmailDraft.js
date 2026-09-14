@@ -9,6 +9,12 @@
 
 const CRLF = "\r\n";
 
+// Parks an emitted anchor while later, shorter link specs run, so a spec can
+// never rewrite text inside an anchor already inserted. A private-use
+// codepoint rather than a control character: this briefly lives inside an HTML
+// string, and a stray NUL there would be far worse than a stray U+E000.
+const SLOT = "\uE000";
+
 /**
  * RFC 2047 encoded-word, for header values that are not pure ASCII.
  * Left alone when the value is already ASCII, because an encoded-word is
@@ -94,28 +100,53 @@ function buildRawMessage({ from, to, subject, text, html, replyTo }) {
 }
 
 /**
- * Turn the plain-text body into HTML, linking the site properly.
- * Gmail rewrites the href to its own redirect on save, which cannot be
+ * Turn the plain-text body into HTML, linking anything worth linking.
+ *
+ * Gmail rewrites every href to its own redirect on save, which cannot be
  * prevented through the API, but an explicit anchor keeps the visible link
- * text as the domain instead of exposing the redirect.
+ * text as the domain instead of exposing the redirect. Without an anchor,
+ * Gmail linkifies the bare domain and writes the redirect into the body text
+ * itself, which reads as spam.
+ *
  * @param {string} text
- * @param {string} site bare domain, e.g. "yfgc.ai"
+ * @param {Array<{text: string, href: string}>|string} links link specs, or a
+ *   bare domain as shorthand for one
  * @returns {string}
  */
-function textToHtml(text, site) {
-  const escaped = String(text == null ? "" : text)
+function textToHtml(text, links) {
+  const specs = (typeof links === "string"
+    ? links
+      ? [{ text: links, href: `https://${links}` }]
+      : []
+    : links || []
+  )
+    .filter((l) => l && l.text && l.href)
+    .slice()
+    .sort((a, b) => b.text.length - a.text.length);
+
+  let html = String(text == null ? "" : text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-  const linked = site
-    ? escaped.replace(
-        new RegExp(`\\b${site.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g"),
-        `<a href="https://${site}">${site}</a>`
-      )
-    : escaped;
+  // Placeholders first, so an already-inserted anchor's own href cannot be
+  // matched and rewritten by a later, shorter spec.
+  const slots = [];
+  for (const link of specs) {
+    const escapedText = link.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // Guarded on both sides so a domain cannot be matched inside a longer
+    // token, e.g. the "yfgc.ai" inside "jesse@yfgc.ai". Spec ordering alone
+    // would also catch that case, but only by accident of string length.
+    const quoted = escapedText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(?<![\\w@.-])${quoted}(?![\\w-])`, "g");
+    html = html.replace(pattern, () => {
+      slots.push(`<a href="${link.href}">${escapedText}</a>`);
+      return `${SLOT}${slots.length - 1}${SLOT}`;
+    });
+  }
+  html = html.replace(new RegExp(`${SLOT}(\\d+)${SLOT}`, "g"), (_, i) => slots[Number(i)]);
 
-  return `<div>${linked.replace(/\n/g, "<br>")}</div>`;
+  return `<div>${html.replace(/\n/g, "<br>")}</div>`;
 }
 
 /**

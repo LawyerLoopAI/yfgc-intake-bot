@@ -29,6 +29,19 @@
 // ---------------------------------------------------------------------------
 
 const SITE = "yfgc.ai";
+const BOOKING_URL = "https://calendly.com/yfgc/30min";
+const BOOKING_TEXT = "calendly.com/yfgc/30min";
+
+// Anything in the copy that should be a real link in the HTML part. Longest
+// first, so a shorter match cannot chew through a longer one.
+const CONTACT_EMAIL = "jesse@yfgc.ai";
+const LINKS = [
+  { text: BOOKING_TEXT, href: BOOKING_URL },
+  // Longer than SITE, so it is matched and parked first. Without it the
+  // signature's address would be chopped into jesse@<a>yfgc.ai</a>.
+  { text: CONTACT_EMAIL, href: `mailto:${CONTACT_EMAIL}` },
+  { text: SITE, href: `https://${SITE}` },
+];
 
 // Basis for the "preeminent" claim in PITCH. Fill this in and keep it current.
 // If it ever goes stale, soften PITCH rather than leaving the claim unsupported.
@@ -47,8 +60,8 @@ const PRACTICE_AREAS =
   "start asking about.";
 
 const OFFER =
-  "Two offers, both free. If something comes up and you want to talk it through, just reply. If you want a " +
-  "proposal for ongoing counsel, ask and I will send one.";
+  "Two offers, both free. If something comes up and you want to talk it through, just reply or grab a slot at " +
+  `${BOOKING_TEXT}. If you want a proposal for ongoing counsel, ask and I will send one.`;
 
 const PITCH =
   "Your Fractional General Counsel\u2122 is the preeminent fractional GC service for companies at your stage: a " +
@@ -62,7 +75,7 @@ const SIGNATURE = [
   "Jesse Strauss",
   "Strauss Law PLLC",
   "765 Amsterdam Avenue, 5E | New York, NY 10024",
-  "jesse@yfgc.ai | 917-541-8428",
+  `${CONTACT_EMAIL} | 917-541-8428`,
 ].join("\n");
 
 // ---------------------------------------------------------------------------
@@ -113,4 +126,16 @@ function buildOutreachEmail(funding) {
   return { subject, body: paragraphs.join("\n\n") };
 }
 
-module.exports = { buildOutreachEmail, SIGNATURE, SIGNOFF, SITE, SUBSTANTIATION, PITCH, OFFER };
+module.exports = {
+  buildOutreachEmail,
+  SIGNATURE,
+  SIGNOFF,
+  SITE,
+  LINKS,
+  CONTACT_EMAIL,
+  BOOKING_URL,
+  BOOKING_TEXT,
+  SUBSTANTIATION,
+  PITCH,
+  OFFER,
+};
