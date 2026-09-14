@@ -4,6 +4,36 @@
 // dotenv, which means the tests can assert on the exact wording without the
 // deployment's packages installed.
 
+/**
+ * Make an API error readable.
+ *
+ * The Anthropic and Google SDKs put the whole response body in err.message, so
+ * a failed company arrived in the summary as a wall of JSON. What Jesse needs
+ * is the sentence inside it: whether the account is out of credit, rate
+ * limited, or sent something malformed.
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+function cleanError(message) {
+  const raw = String(message == null ? "" : message);
+  const start = raw.indexOf("{");
+  if (start === -1) return raw;
+
+  const prefix = raw.slice(0, start).trim();
+  try {
+    const parsed = JSON.parse(raw.slice(start));
+    const inner =
+      (parsed.error && (parsed.error.message || parsed.error.type)) ||
+      parsed.message ||
+      null;
+    if (!inner) return raw;
+    return [prefix, inner].filter(Boolean).join(" ");
+  } catch {
+    return raw;
+  }
+}
+
 function describe(row, contact, draftId, completed) {
   const bits = [`${row.company}, ${[row.amountText, row.round].filter(Boolean).join(" ") || "amount not stated"}`];
   if (contact.fullName) {
@@ -66,7 +96,7 @@ function buildSummary(outcome, tracker) {
   if (outcome.failed.length) {
     lines.push("FAILED", "");
     for (const f of outcome.failed) {
-      lines.push(`${f.company || f.messageId}: ${f.error}`);
+      lines.push(`${f.company || f.messageId}: ${cleanError(f.error)}`);
     }
     lines.push("");
   }
@@ -90,4 +120,4 @@ function buildSummary(outcome, tracker) {
   return lines.join("\n");
 }
 
-module.exports = { buildSummary, describe };
+module.exports = { buildSummary, describe, cleanError };

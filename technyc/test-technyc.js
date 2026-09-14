@@ -379,7 +379,7 @@ check("digest date", digestDate("Tech:NYC Digest: September 10"), "September 10"
 check("digest date when the prefix is absent", digestDate("Something else"), "Something else");
 
 console.log("\nbuildSummary");
-const { buildSummary } = require("./summary");
+const { buildSummary, cleanError } = require("./summary");
 const summary = buildSummary({
   digests: [],
   drafted: [
