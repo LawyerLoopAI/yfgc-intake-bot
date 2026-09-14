@@ -38,33 +38,29 @@ const SUBSTANTIATION = [
   "served, any published rating and its source, or comparative pricing data.",
 ].join(" ");
 
-const PITCH =
-  "Your Fractional General Counsel™ is the preeminent fractional general counsel service for companies at " +
-  "your stage, and the alternative to the two options most founders get handed. A large firm gives you real " +
-  "lawyers at rates that are cost prohibitive for routine work. A black box AI firm gives you fast output at a " +
-  "price that looks terrific right up until you have an actual legal problem and need a person who is " +
-  "accountable for the answer. We give you a senior lawyer, on a predictable fractional arrangement, who is on " +
-  "the hook for the advice.";
+const PRACTICE_AREAS =
+  "I am Jesse Strauss, outside general counsel to venture-backed companies in New York. The months right after " +
+  "a raise are usually when the legal questions pile up: equity and option grants, contractor classification, " +
+  "customer and vendor contracts, IP cleanup, privacy terms, and the board housekeeping your investors will " +
+  "start asking about.";
 
 const OFFER =
-  "Two standing offers, both free. If a legal issue comes up and you would like to talk it through, just reply " +
-  "and we will talk it through. And if you would like a proposal for ongoing counsel, ask and I will send one. " +
-  "No charge and no obligation either way.";
+  "Two offers, both free. If something comes up and you want to talk it through, just reply. If you want a " +
+  "proposal for ongoing counsel, ask and I will send one.";
 
-const PRACTICE_AREAS =
-  "I am Jesse Strauss, and I serve as outside general counsel to venture-backed companies in New York. The " +
-  "months right after a raise tend to be when legal questions start arriving faster than anyone planned for: " +
-  "option grants and equity paperwork, employee and contractor classification, customer and vendor agreements, " +
-  "IP assignment cleanup, privacy and data terms, and the governance housekeeping new investors start asking " +
-  "about.";
+const PITCH =
+  "Your Fractional General Counsel\u2122 is the preeminent fractional GC service for companies at your stage: a " +
+  "senior lawyer on a predictable fractional arrangement, instead of large firm rates that are cost prohibitive " +
+  "for routine work, or a black box AI firm with nobody accountable when you have a real problem. Have a look " +
+  `at ${SITE} and see what we are about.`;
+
+const SIGNOFF = "Hope we can talk more!";
 
 const SIGNATURE = [
-  "Best regards,",
   "Jesse Strauss",
   "Strauss Law PLLC",
   "765 Amsterdam Avenue, 5E | New York, NY 10024",
   "jesse@strausslawpllc.com | 917-541-8428",
-  "yourfractionalgc.com",
 ].join("\n");
 
 // ---------------------------------------------------------------------------
@@ -99,27 +95,20 @@ function buildOutreachEmail(funding) {
     [
       `Congratulations on ${company}'s ${raisePhrase}${valuation}.`,
       investors || null,
-      "Closing a round like that is hard, and it is worth marking.",
+      "I saw it in the Tech:NYC Digest.",
     ]
       .filter(Boolean)
       .join(" "),
-
-    description
-      ? `I came across ${company} in the Tech:NYC Digest, described there as ${description}.`
-      : null,
 
     PRACTICE_AREAS,
     OFFER,
     PITCH,
 
-    `Have a look at ${SITE} and see what we are about.`,
-
-    "Congratulations again, and good luck with what comes next.",
-
+    SIGNOFF,
     SIGNATURE,
   ].filter(Boolean);
 
   return { subject, body: paragraphs.join("\n\n") };
 }
 
-module.exports = { buildOutreachEmail, SIGNATURE, SITE, SUBSTANTIATION, PITCH, OFFER };
+module.exports = { buildOutreachEmail, SIGNATURE, SIGNOFF, SITE, SUBSTANTIATION, PITCH, OFFER };

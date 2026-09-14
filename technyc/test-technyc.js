@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const { parseFundingSection } = require("./parseFunding");
-const { buildOutreachEmail, SIGNATURE, SITE, SUBSTANTIATION } = require("./emailTemplate");
+const { buildOutreachEmail, SIGNATURE, SIGNOFF, SITE, SUBSTANTIATION } = require("./emailTemplate");
 
 let passed = 0;
 let failed = 0;
@@ -63,13 +63,19 @@ ok("states the amount", withName.body.includes("$70 million"));
 ok("states the round", withName.body.includes("Series C"));
 ok("names the investors", withName.body.includes("NewView Capital"));
 ok("cites where the news came from", withName.body.includes("Tech:NYC Digest"));
-ok("makes the free consultation offer", withName.body.includes("just reply and we will talk it through"));
+ok("signs off as asked", withName.body.includes(SIGNOFF));
+ok("no stale Best regards sign-off", !withName.body.includes("Best regards"));
+ok("makes the free consultation offer", withName.body.includes("just reply"));
 ok("makes the proposal offer", withName.body.includes("ask and I will send one"));
-ok("says no charge and no obligation", withName.body.includes("No charge and no obligation"));
-ok("carries the positioning claim", withName.body.includes("preeminent fractional general counsel service"));
+ok("says both offers are free", withName.body.includes("Two offers, both free"));
+ok("carries the positioning claim", withName.body.includes("preeminent fractional GC service"));
 ok("names the large firm alternative", withName.body.includes("cost prohibitive"));
 ok("names the AI firm alternative", withName.body.includes("black box AI firm"));
 ok("points the reader at the site", withName.body.includes(SITE));
+ok("interpolates the site rather than printing the placeholder", !withName.body.includes("${SITE}"));
+// Jesse asked for this to be short. Keep it honest with a hard ceiling.
+const words = withName.body.split(/\s+/).length;
+ok(`body stays under 220 words (was ${words})`, words < 220);
 ok("carries the full signature block", withName.body.includes(SIGNATURE));
 ok("includes the principal office address", withName.body.includes("765 Amsterdam Avenue"));
 ok("includes the office telephone number", withName.body.includes("917-541-8428"));
@@ -102,5 +108,104 @@ if (/^TODO/.test(SUBSTANTIATION.trim())) {
   ok("SUBSTANTIATION is filled in", true);
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+// ---------------------------------------------------------------------------
+
+const {
+  findEmail,
+  extractEmails,
+  inferShape,
+  nameParts,
+  isRoleAddress,
+} = require("./findEmail");
+
+console.log("\nextractEmails");
+check(
+  "keeps only addresses at the company domain",
+  extractEmails(
+    'mail <a href="mailto:Alex.Hejnosz@Inspiren.com">here</a>, pr at agency@flackpr.com, press@inspiren.com',
+    "inspiren.com"
+  ).sort(),
+  ["alex.hejnosz@inspiren.com", "press@inspiren.com"]
+);
+check("counts subdomain mail as the same company", extractEmails("news@mail.acme.com", "acme.com"), ["news@mail.acme.com"]);
+check("strips trailing punctuation", extractEmails("write to sam@acme.com.", "acme.com"), ["sam@acme.com"]);
+check("empty page", extractEmails("", "acme.com"), []);
+
+console.log("\nnameParts");
+check("splits a name", nameParts("Alex Hejnosz"), { first: "alex", last: "hejnosz" });
+check("folds accents", nameParts("Zoë Weil"), { first: "zoe", last: "weil" });
+check("uses the last token for three-part names", nameParts("David St Geme"), { first: "david", last: "geme" });
+check("rejects a single token", nameParts("Cher"), null);
+
+console.log("\nisRoleAddress");
+check("press is a role address", isRoleAddress("press@acme.com"), true);
+check("a person is not", isRoleAddress("alex.hejnosz@acme.com"), false);
+
+console.log("\ninferShape");
+check(
+  "infers first.last from two samples",
+  inferShape(["jane.doe@acme.com", "sam.smith@acme.com"]).shape,
+  "first.last"
+);
+check("refuses to infer from one sample", inferShape(["jane.doe@acme.com"]), null);
+check("ignores role addresses when inferring", inferShape(["press@acme.com", "info@acme.com", "jane.doe@acme.com"]), null);
+check(
+  "does not treat single-token locals as a pattern",
+  inferShape(["jane@acme.com", "sam@acme.com"]),
+  null
+);
+
+console.log("\nfindEmail");
+function fakeSite(pages) {
+  return async (url) => {
+    const path = new URL(url).pathname;
+    if (!(path in pages)) return { ok: false, text: async () => "" };
+    return { ok: true, text: async () => pages[path] };
+  };
+}
+
+findEmail({
+  website: "https://acme.com/",
+  personName: "Jane Doe",
+  fetchImpl: fakeSite({ "/team": "Jane Doe, CEO. jane.doe@acme.com" }),
+}).then((r) => {
+  check("verified when the address matches the person", [r.email, r.confidence], ["jane.doe@acme.com", "verified"]);
+  check("records where it was found", r.evidence, ["https://acme.com/team"]);
+
+  return findEmail({
+    website: "https://acme.com/",
+    personName: "Jane Doe",
+    fetchImpl: fakeSite({ "/team": "sam.smith@acme.com and rita.kaur@acme.com" }),
+  });
+}).then((r) => {
+  check("constructs from a repeated pattern", [r.email, r.confidence], ["jane.doe@acme.com", "pattern"]);
+  ok("says the address was constructed", /constructed as first\.last/.test(r.notes.join(" ")));
+
+  return findEmail({
+    website: "https://acme.com/",
+    personName: "Jane Doe",
+    fetchImpl: fakeSite({ "/contact": "press@acme.com" }),
+  });
+}).then((r) => {
+  check("falls back to a shared inbox", [r.email, r.confidence], ["press@acme.com", "role"]);
+
+  return findEmail({
+    website: "https://acme.com/",
+    personName: "Jane Doe",
+    fetchImpl: fakeSite({}),
+  });
+}).then((r) => {
+  check("returns nothing rather than guessing", [r.email, r.confidence], [null, null]);
+  ok("explains why", r.notes.length > 0);
+
+  return findEmail({
+    website: "https://acme.com/",
+    personName: "Jane Doe",
+    fetchImpl: async () => { throw new Error("network down"); },
+  });
+}).then((r) => {
+  check("survives a dead network", [r.email, r.confidence], [null, null]);
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed === 0 ? 0 : 1);
+});

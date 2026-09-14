@@ -108,15 +108,70 @@ Rules:
 - If you cannot identify a person at all, do not guess and do not address the
   draft to "the team". Skip to Step 5 and report it.
 
-## Step 4 - Find the email address
+## Step 4 - Find the email address (the priority step)
 
-- Accept an address only if you actually saw it: on the company site, in a press
-  release, in an SEC filing, in the digest itself.
-- **Never construct an address from a pattern.** `first@company.com` is a guess
-  even when it is usually right, and a bounce on a cold introduction is worse
-  than a blank To: line.
-- No verified address means the draft still gets created, addressed to nobody.
-  Jesse fills it in. Flag it in the summary.
+**This is the most important part of the run.** A draft addressed to nobody is
+a draft Jesse has to finish by hand. Spend real effort here, more than on any
+other step, and do not stop at the first dead end.
+
+`technyc/findEmail.js` automates the site sweep. Give it the company URL, the
+person's full name, and a fetch implementation:
+
+```js
+const { findEmail } = require("./technyc/findEmail");
+await findEmail({ website, personName, fetchImpl: fetch, extraPages: [pressReleaseUrl] });
+```
+
+It reads the home page plus `/contact`, `/about`, `/team`, `/leadership`,
+`/press`, `/privacy`, `/terms` and friends, keeps only addresses at the
+company's own domain, and returns one of four confidences: `verified` (read off
+a page and matching the person's name), `pattern` (built from their name using
+an address shape seen at least twice at that domain), `role` (a real shared
+inbox such as `press@`), or `null`.
+
+**Network caveat.** `findEmail.js` needs to reach arbitrary company websites.
+Inside the Claude Code sandbox the egress proxy allows only an allowlist, and
+company sites are not on it, so the module cannot do its job there. Where you
+cannot browse, work the search-only ladder below and say plainly in the summary
+that the site sweep did not run.
+
+Work these in order and keep going until something lands:
+
+1. **The company's own site.** Contact, about, team, leadership, press pages.
+   Privacy policies and terms of service are the reliable ones: they almost
+   always publish a monitored address, and it is usually at the real domain.
+2. **The funding press release.** The media contact block at the bottom names a
+   person and gives an address. Search `"<Company>" "media contact"` or
+   `"<Company>" press release <round>`.
+3. **SEC EDGAR.** A company that just raised has very likely filed a Form D,
+   which names the executive officers with a company address and phone. Full
+   text search at efts.sec.gov.
+4. **GitHub.** For a technical founder, commit author addresses on their public
+   repos are real addresses. `git log --format='%ae'` on a clone, or the commits
+   API.
+5. **Their own writing.** Personal site, blog, Substack, conference speaker bio,
+   podcast show notes, university or alumni page. People publish their address
+   in these places far more often than on their company site.
+6. **Their public profiles.** X or LinkedIn bios frequently carry an address or
+   a link tree that does.
+
+Then apply this rule about what you may actually put in the `To:` line:
+
+- **Verified beats everything.** An address you read on a page, whose local part
+  matches the person's name, goes straight in.
+- **A pattern-derived address is allowed, and must be labeled.** If at least two
+  real addresses at that domain share a shape, applying that shape to this
+  person's name is a sound inference, not a guess. Put it in the `To:` line and
+  say in the summary that it is pattern-derived and from what basis.
+- **A shared inbox is a fallback, not a failure.** `press@` or `hello@` with the
+  person named in the salutation still reaches a desk. Use it, and label it.
+- **One sample is not a pattern.** Never extrapolate a shape from a single
+  address, and never invent a shape you have not seen at that domain.
+- **Nothing found means an empty `To:` line.** Create the draft anyway. Do not
+  put a placeholder or a mailing list in the field.
+
+Whatever you land on, record the confidence and the evidence URLs. The summary
+tells Jesse which addresses he can send blind and which want a glance first.
 
 ## Step 5 - Create one draft per company
 
@@ -167,10 +222,12 @@ Subject: `TechNYC outreach: N drafts ready (Month D)`
 Body, plain and scannable:
 
 - **Drafts ready to send.** One line per company: company, amount and round,
-  contact name and title, the address on the draft, and the source URL for the
-  identification.
-- **Drafts needing an address.** Company, contact name and title, why no address
-  was found, and where Jesse might look.
+  contact name and title, the address on the draft with its confidence
+  (`verified`, `pattern`, `role`), and the source URL for the identification.
+  Pattern-derived and shared-inbox addresses get a word on the basis, so Jesse
+  knows which ones to eyeball before sending.
+- **Drafts needing an address.** Company, contact name and title, every source
+  in the Step 4 ladder you actually tried, and where Jesse might look next.
 - **No contact identified.** Company, amount and round, everything you did find,
   and the pages you checked. Say what is missing rather than that it "failed".
 - **Skipped.** Companies passed over for prior contact or a do-not-contact, with
@@ -189,8 +246,11 @@ work.
 
 - Never send an outreach email. Drafts only. The summary to Jesse is the one
   message you send.
-- Never invent a name, title, email address, funding amount, round, or investor.
-  Every fact in a draft traces to the digest or to a page you actually read.
+- Never invent a name, title, funding amount, round, or investor. Every fact in
+  a draft traces to the digest or to a page you actually read.
+- An address may be inferred from a pattern seen at least twice at that domain,
+  but it must be labeled as inferred in the summary. Anything weaker than that
+  is a guess, and a guess never goes in a To: line.
 - Never edit the pitch copy in `emailTemplate.js` as part of a run. If it needs
   to change, tell Jesse in the summary and let him decide.
 - Never draft for a company that already has an outreach draft or sent message.

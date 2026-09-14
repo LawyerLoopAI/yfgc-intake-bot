@@ -12,7 +12,9 @@ Drafts only. Nothing is ever sent to a prospect automatically.
 
 1. Find threads labeled `TechNYC Emails` from the last seven days.
 2. Parse the New York Funding section (`parseFunding.js`).
-3. Research each company's CEO or founder, and their email address.
+3. Research each company's CEO or founder, then find their email address
+   (`findEmail.js`). This is the step that decides whether a draft is ready to
+   send or homework.
 4. Build the email copy (`emailTemplate.js`) and create a Gmail draft.
 5. Send Jesse one summary email.
 
@@ -34,6 +36,7 @@ a `TechNYC Processed` label would be a cheaper check, but it is not required.
 |---|---|
 | `parseFunding.js` | Pulls structured company records out of the digest's plain-text body |
 | `emailTemplate.js` | The approved outreach copy, plus the signature block and the substantiation note |
+| `findEmail.js` | Sweeps a company's site for published addresses and resolves one for a named person |
 | `fixtures/2026-09-10.txt` | A real digest section, trimmed, used by the tests |
 | `test-technyc.js` | Offline checks. No network, no API charges |
 | `../.claude/skills/technyc-outreach/SKILL.md` | The step-by-step procedure the scheduled run follows |
@@ -81,3 +84,45 @@ Two practical rules the pipeline still enforces itself:
 - Name, principal law office address and telephone number appear in every
   message. That was expressly required by the repealed 7.1(h) and is kept
   because it is the safe practice and costs nothing.
+
+## Finding the address
+
+`findEmail.js` reads the company's home page plus its contact, about, team,
+leadership, press, privacy and terms pages, keeps only addresses at the
+company's own domain, and returns one of four confidences:
+
+| Confidence | Meaning | Goes in the To: line? |
+|---|---|---|
+| `verified` | Read off a page, and the local part matches the person's name | Yes |
+| `pattern` | Built from their name using an address shape seen at least twice at that domain | Yes, labeled as inferred |
+| `role` | A real published shared inbox such as `press@` | Yes, labeled, person named in the salutation |
+| `null` | Nothing found | No. Empty To: line, never a placeholder |
+
+The rule that does not bend is that a guessed address is never presented as a
+found one. One sample is never a pattern, and a shape never seen at the domain
+is never invented. Everything else is fair game, because a draft addressed to
+nobody is a draft Jesse has to finish by hand.
+
+### It cannot run in the Claude Code sandbox
+
+`findEmail.js` needs to reach arbitrary company websites, and the sandbox's
+egress proxy allows only an allowlist. Company sites are not on it:
+
+```
+$ curl -o /dev/null -w '%{http_code}' https://inspiren.com/
+000
+```
+
+Search still works there, so a run inside the sandbox can identify the person
+but usually cannot find their address. Two ways to fix that:
+
+1. **Run it from the Vercel deployment.** This repo already deploys there with
+   open outbound HTTPS. Pass the platform `fetch` as `fetchImpl`. This is the
+   better home for the pipeline long term.
+2. **Use an environment whose network policy permits general browsing.** See
+   https://code.claude.com/docs/en/claude-code-on-the-web for how the network
+   policy is chosen when an environment is created.
+
+A commercial finder (Hunter.io, Apollo, Clearbit) would raise the hit rate
+further and slots in ahead of the site sweep, but it needs an API key and a
+budget, so it is not wired in.
