@@ -19,6 +19,13 @@ Drafts only. Nothing is ever sent to a prospect automatically.
    `jesse@yfgc.ai` (`gmailDraft.js`).
 5. Send Jesse one summary email (`summary.js`).
 
+Companies are researched **concurrently**, four at a time. Run sequentially,
+two Claude calls per company at high effort exhausted the time budget by the
+third company: the September 14 run cut Luminary's sweep short and never
+reached Sequen or Type at all. The work is almost all waiting on other
+people's servers, so a few at once turns fifteen minutes of latency into about
+three.
+
 It runs as a Vercel cron at `/api/technyc`, 12:00 UTC Monday through Saturday,
 which is 8am ET in summer and 7am in winter. Digests land around 5:45pm ET on
 weekdays, so a morning run picks up the previous evening's issue and Monday
@@ -43,6 +50,7 @@ a `TechNYC Processed` label would be a cheaper check, but it is not required.
 | `parseFunding.js` | Pulls structured company records out of the digest's plain-text body |
 | `emailTemplate.js` | The approved outreach copy, plus the signature block and the substantiation note |
 | `findEmail.js` | Sweeps a company's site for published addresses and resolves one for a named person |
+| `emailProvider.js` | Hunter.io lookup and mailbox verification, inert without `HUNTER_API_KEY` |
 | `research.js` | Identifies the CEO or founder via Claude's web search tool, then confirms the address with `findEmail.js` |
 | `gmailDraft.js` | Builds the draft as raw MIME so it can carry an explicit `From:` |
 | `summary.js` | Formats the run summary Jesse receives |
@@ -128,8 +136,40 @@ Three sources, in order:
    listings, the funding press release contact when it names this person, SEC
    EDGAR filings, GitHub commit authorship, personal sites and newsletters,
    speaker bios and alumni pages.
-3. **Sweep the company's own pages** (`findEmail.js`). Deterministic, and a
-   name-matching hit here outranks anything softer.
+3. **Ask Hunter** (`emailProvider.js`), when `HUNTER_API_KEY` is set. See below.
+4. **Sweep the company's own pages** (`findEmail.js`). Deterministic backstop.
+
+Whichever source produces the strongest evidence wins, and the summary names
+which one it came from.
+
+### Hunter.io
+
+Founder addresses are mostly not on the open web. The September 14 run proved
+it: for Cymphony the only address anywhere on the domain was `privacy@`, and
+for Inspiren the data brokers showed masked stubs like `a***@inspiren.com`.
+The brokers hold the address and charge for it, so better searching cannot
+close that gap.
+
+Set `HUNTER_API_KEY` in Vercel to turn this on. Without it the module returns
+null on every call and the pipeline behaves exactly as before, so there is no
+code change needed either way.
+
+Two endpoints are used. `email-finder` takes the domain plus a first and last
+name and returns an address with its own confidence score. `email-verifier`
+then checks whether that mailbox actually accepts mail, which is the part
+worth paying for: it protects the sending reputation of a young domain doing
+cold outreach.
+
+| Hunter says | Result |
+|---|---|
+| deliverable | used, `verified` |
+| undeliverable | discarded, even at score 99, because a bounce costs reputation |
+| risky or catch-all, finder score at least 80 | used, `pattern`, flagged for a glance |
+| risky or catch-all, score below 80 | not used |
+| no result, or the API is down | not used, and the run continues |
+
+Roughly 110 lookups a month at five companies a day, which is inside the
+entry tier.
 
 | Confidence | Meaning | Used? |
 |---|---|---|
@@ -172,6 +212,8 @@ budget, so it is not wired in.
 
 ### Environment
 
-Beyond what `/api/process` already needs, this adds nothing: it reuses
-`ANTHROPIC_API_KEY`, the Google OAuth variables, and `CRON_SECRET`. The Gmail
-token needs `gmail.modify`, which `gmail/auth.js` already requests.
+Reuses `ANTHROPIC_API_KEY`, the Google OAuth variables, and `CRON_SECRET`. The
+Gmail token needs `gmail.modify`, which `gmail/auth.js` already requests.
+
+One optional addition: `HUNTER_API_KEY`. Without it the pipeline runs exactly
+as before, just with more empty To: lines.

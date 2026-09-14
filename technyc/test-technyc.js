@@ -426,6 +426,84 @@ ok("says nothing about filling in for a fresh draft", !summary.includes("filled 
 ok("states nothing was sent", summary.includes("Nothing has been sent."));
 ok("no em dash in the summary", !summary.includes("—"));
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  process.exit(failed === 0 ? 0 : 1);
+  runProviderSuite().then(() => {
+    console.log(`\n${passed} passed, ${failed} failed`);
+    process.exit(failed === 0 ? 0 : 1);
+  });
+}
+
+// ---------------------------------------------------------------------------
+
+async function runProviderSuite() {
+  const { lookupEmail, MIN_FINDER_SCORE } = require("./emailProvider");
+
+  // Fake Hunter. finder and verifier are keyed off the URL path.
+  const hunter = (finderData, verifierData) => async (url) => {
+    const isFinder = url.includes("/email-finder");
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: isFinder ? finderData : verifierData }),
+    };
+  };
+
+  console.log("\nemailProvider (Hunter)");
+
+  check(
+    "no key means the provider is inert",
+    await lookupEmail({ domain: "acme.com", fullName: "Jane Doe", apiKey: null, fetchImpl: async () => {} }),
+    null
+  );
+
+  let r = await lookupEmail({
+    domain: "inspiren.com", fullName: "Alex Hejnosz", apiKey: "k",
+    fetchImpl: hunter({ email: "alex@inspiren.com", score: 95, sources: [{ uri: "https://x" }] }, { result: "deliverable", status: "valid" }),
+  });
+  check("a verified deliverable mailbox is used", [r.email, r.confidence], ["alex@inspiren.com", "verified"]);
+  ok("says the mailbox was verified", /verified deliverable/.test(r.notes.join(" ")));
+
+  // An address that would bounce costs sender reputation, which matters most
+  // for a young domain doing cold outreach.
+  r = await lookupEmail({
+    domain: "acme.com", fullName: "Jane Doe", apiKey: "k",
+    fetchImpl: hunter({ email: "jane@acme.com", score: 99, sources: [] }, { result: "undeliverable", status: "invalid" }),
+  });
+  check("an undeliverable address is discarded even at a high score", [r.email, r.confidence], [null, null]);
+  ok("explains the discard", /undeliverable/.test(r.notes.join(" ")));
+
+  // Catch-all domains cannot be verified either way, so the finder's own
+  // confidence decides.
+  r = await lookupEmail({
+    domain: "acme.com", fullName: "Jane Doe", apiKey: "k",
+    fetchImpl: hunter({ email: "jane.doe@acme.com", score: 92, sources: [] }, { result: "risky", status: "accept_all", accept_all: true }),
+  });
+  check("a catch-all with a high score is used but flagged", [r.email, r.confidence], ["jane.doe@acme.com", "pattern"]);
+  ok("names the catch-all reason", /catch-all/.test(r.notes.join(" ")));
+
+  r = await lookupEmail({
+    domain: "acme.com", fullName: "Jane Doe", apiKey: "k",
+    fetchImpl: hunter({ email: "j.doe@acme.com", score: 40, sources: [] }, { result: "risky", status: "accept_all", accept_all: true }),
+  });
+  check("a low-scoring unverified address is not used", [r.email, r.confidence], [null, null]);
+  ok("names the threshold", new RegExp(String(MIN_FINDER_SCORE)).test(r.notes.join(" ")));
+
+  r = await lookupEmail({
+    domain: "acme.com", fullName: "Jane Doe", apiKey: "k",
+    fetchImpl: hunter({ email: null, score: null, sources: [] }, {}),
+  });
+  check("no result from Hunter", [r.email, r.confidence], [null, null]);
+
+  // A provider outage must not take the whole company down with it.
+  r = await lookupEmail({
+    domain: "acme.com", fullName: "Jane Doe", apiKey: "k",
+    fetchImpl: async () => { throw new Error("network down"); },
+  });
+  check("a provider outage degrades to no result", [r.email, r.confidence], [null, null]);
+  ok("reports the failure", /finder failed/.test(r.notes.join(" ")));
+
+  check(
+    "a single-token name is rejected before spending a lookup",
+    await lookupEmail({ domain: "acme.com", fullName: "Cher", apiKey: "k", fetchImpl: async () => { throw new Error("should not be called"); } }),
+    null
+  );
 }

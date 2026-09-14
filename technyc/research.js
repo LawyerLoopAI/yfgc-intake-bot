@@ -6,7 +6,8 @@
 // Here there is open outbound HTTPS, so the site sweep in findEmail.js works
 // and Claude's server-side web_search tool can do the identification.
 
-const { findEmail } = require("./findEmail");
+const { findEmail, siteDomain } = require("./findEmail");
+const { lookupEmail } = require("./emailProvider");
 
 const MODEL = "claude-opus-5";
 
@@ -93,6 +94,12 @@ function collectText(content) {
  * @param {object} [deps] injection points for tests
  * @returns {Promise<object>} contact details, always an object, never a throw
  */
+// Strength of evidence, highest first. A mailbox Hunter confirmed accepts
+// mail, or an address read off a page that matches the person's name, both
+// count as verified; an inferred one is a step below.
+const RANK = { verified: 2, pattern: 1 };
+const rank = (confidence) => RANK[confidence] || 0;
+
 async function askForJson(client, system, prompt, maxUses) {
   const response = await client.messages.create({
     model: MODEL,
@@ -130,7 +137,7 @@ async function researchContact(funding, deps = {}) {
   const result = {
     company,
     fullName: null, firstName: null, title: null, isCeo: false, otherLeaders: [],
-    email: null, emailConfidence: null, sources: [], searched: [], notes: "", errors: [],
+    email: null, emailConfidence: null, emailSource: null, sources: [], searched: [], notes: "", errors: [],
   };
 
   // Stage 1: who.
@@ -193,22 +200,49 @@ async function researchContact(funding, deps = {}) {
     }
   }
 
-  // Stage 3: the deterministic site sweep. It reads pages the model may have
-  // skimmed, so a name-matching hit here outranks anything softer.
+  const consider = (candidate, label) => {
+    if (!candidate) return;
+    if (candidate.email && rank(candidate.confidence) > rank(result.emailConfidence)) {
+      result.email = candidate.email;
+      result.emailConfidence = candidate.confidence;
+      result.emailSource = label;
+    }
+    if (candidate.sources && candidate.sources.length) {
+      result.sources = [...new Set([...result.sources, ...candidate.sources])];
+    }
+    if (candidate.notes && candidate.notes.length) {
+      result.notes = [result.notes, ...candidate.notes].filter(Boolean).join(" ");
+    }
+  };
+
+  if (result.email) result.emailSource = "web search";
+
+  // Stage 3: Hunter, when a key is configured. This is the source that
+  // actually closes the gap, because founder addresses mostly are not on the
+  // open web. Its verifier can confirm a mailbox accepts mail, which no amount
+  // of reading pages can establish.
+  const hunterKey = deps.hunterApiKey || process.env.HUNTER_API_KEY;
+  if (hunterKey && (!deadline || Date.now() < deadline)) {
+    const domain = siteDomain(website);
+    try {
+      consider(
+        await lookupEmail({ domain, fullName: result.fullName, apiKey: hunterKey, fetchImpl }),
+        "hunter"
+      );
+    } catch (err) {
+      result.errors.push(`Hunter lookup failed: ${err.message}`);
+    }
+  }
+
+  // Stage 4: the deterministic site sweep, as a backstop. It reads pages the
+  // model may have skimmed.
   if (website && fetchImpl) {
     try {
       const sweep = await findEmail({ website, personName: result.fullName, fetchImpl, deadline });
-      const beatsCurrent =
-        sweep.email &&
-        (!result.email || (sweep.confidence === "verified" && result.emailConfidence !== "verified"));
-      if (beatsCurrent) {
-        result.email = sweep.email;
-        result.emailConfidence = sweep.confidence;
-      }
-      if (sweep.evidence.length) result.sources = [...new Set([...result.sources, ...sweep.evidence])];
-      if (!result.email && sweep.notes.length) {
-        result.notes = [result.notes, ...sweep.notes].filter(Boolean).join(" ");
-      }
+      consider(
+        { email: sweep.email, confidence: sweep.confidence, sources: sweep.evidence, notes: sweep.email ? [] : sweep.notes },
+        "site sweep"
+      );
     } catch (err) {
       result.errors.push(`site sweep failed: ${err.message}`);
     }
