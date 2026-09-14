@@ -30,7 +30,9 @@
 
 const SITE = "yfgc.ai";
 const BOOKING_URL = "https://calendly.com/yfgc/30min";
-const BOOKING_TEXT = "calendly.com/yfgc/30min";
+// Shown in full, scheme and all, because Jesse wants the whole URL visible in
+// the plain-text body rather than a bare domain.
+const BOOKING_TEXT = "https://calendly.com/yfgc/30min";
 
 // Anything in the copy that should be a real link in the HTML part. Longest
 // first, so a shorter match cannot chew through a longer one.
@@ -63,7 +65,7 @@ const PRACTICE_AREAS =
   "start asking about.";
 
 const OFFER =
-  "Two offers, both free. If something comes up and you want to talk it through, just reply or grab a slot at " +
+  "Two offers, both free. If something comes up and you want to talk it through, just reply or book time at " +
   `${BOOKING_TEXT}. If you want a proposal for ongoing counsel, ask and I will send one.`;
 
 const PITCH =
