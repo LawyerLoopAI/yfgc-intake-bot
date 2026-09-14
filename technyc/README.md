@@ -10,18 +10,23 @@ Drafts only. Nothing is ever sent to a prospect automatically.
 
 ## How a run goes
 
-1. Find threads labeled `TechNYC Emails` that are not yet labeled
-   `TechNYC Processed`.
+1. Find threads labeled `TechNYC Emails` from the last seven days.
 2. Parse the New York Funding section (`parseFunding.js`).
 3. Research each company's CEO or founder, and their email address.
 4. Build the email copy (`emailTemplate.js`) and create a Gmail draft.
-5. Apply `TechNYC Processed` to the thread.
-6. Send Jesse one summary email.
+5. Send Jesse one summary email.
 
-The `TechNYC Processed` Gmail label is the only state the pipeline keeps. That
-is deliberate: each scheduled run starts from a fresh checkout, so a local
-`processed-ids.json` would be useless, and the label survives anywhere Gmail
-does.
+**The work product is the state.** The Gmail connector's scope covers reading,
+composing drafts and sending, but not writing labels, so the pipeline cannot
+mark a thread done. Instead it checks whether a draft or sent message already
+exists for a given company (`subject:"Congratulations on <Company>'s"`) and
+whether the day's summary has already gone out
+(`in:sent subject:"TechNYC outreach"`). That is more robust than a local
+`processed-ids.json` would be, since each scheduled run starts from a fresh
+checkout.
+
+If the connector is ever re-authorized with `gmail.labels` or `gmail.modify`,
+a `TechNYC Processed` label would be a cheaper check, but it is not required.
 
 ## Files
 

@@ -24,8 +24,9 @@ summary to Jesse.
 | Thing | Value |
 |---|---|
 | Source label | `TechNYC Emails` (`Label_2387005531655631291`) |
-| Done label | `TechNYC Processed` (create it if missing) |
 | Summary goes to | `jesse@strausslawpllc.com` |
+| Outreach subject shape | `Congratulations on <Company>'s ...` |
+| Summary subject shape | `TechNYC outreach: N drafts ready (Month D)` |
 | Repo helpers | `technyc/parseFunding.js`, `technyc/emailTemplate.js` |
 
 Digests arrive most weekdays around 5:45pm ET. Friday round-up editions often
@@ -33,23 +34,37 @@ have no funding section at all, which is a normal empty run.
 
 ---
 
-## Step 1 - Find unprocessed digests
+## Step 1 - Find digests that have not been worked yet
 
 Gmail `search_threads` with:
 
 ```
-label:Label_2387005531655631291 -label:TechNYC Processed
+label:Label_2387005531655631291
 ```
 
-The label is the only state. There is no local file to consult, and the runner
-gets a fresh checkout each time, so **the `TechNYC Processed` label is what
-stops a company being emailed twice.** Apply it in Step 6 and never skip it.
+**There is no processed-marker label.** The connector's Gmail scope allows
+reading, composing drafts and sending, but not writing labels, so the pipeline
+cannot mark a thread done. Instead the work product is the state:
 
-Jesse receives each digest at two addresses, so one calendar day can produce two
-near-identical messages. De-duplicate by subject line (`Tech:NYC Digest: <date>`)
-and process each date once.
+- A digest dated D is already done if a sent message matches
+  `in:sent subject:"TechNYC outreach" "(Month D)"`.
+- A company is already covered if a draft or sent message matches
+  `subject:"Congratulations on <Company>'s"`. Check both
+  `list_drafts` and `in:sent`, because a draft Jesse has already sent will no
+  longer be in Drafts.
 
-If nothing matches, stop. Send no summary. A quiet day is not worth an email.
+Run the per-company check in Step 5 too, not just here. It is the backstop that
+actually prevents a duplicate cold email, and it is cheap.
+
+Jesse receives each digest at two addresses, so one calendar day produces two
+near-identical messages in the same or adjacent threads. De-duplicate by subject
+line (`Tech:NYC Digest: <date>`) and work each date once.
+
+Only look back seven days. Older digests are stale news and congratulating
+someone a month late reads badly.
+
+If nothing is left to work, stop. Send no summary. A quiet day is not worth an
+email.
 
 ## Step 2 - Extract the funded companies
 
@@ -114,6 +129,10 @@ console.log(JSON.stringify(buildOutreachEmail(JSON.parse(process.argv[1]))));
 " "$RECORD_JSON"
 ```
 
+Before creating anything, run the per-company duplicate check from Step 1. If a
+draft or a sent message already exists for this company, skip it and note the
+skip in the summary.
+
 Then `Gmail: create_draft` with:
 
 - `to`: `[verified address]`, or omit entirely when there is none
@@ -139,13 +158,7 @@ unreviewed claim gets into a client-facing email.
 - The pitch text in `emailTemplate.js` is Jesse's, reviewed and approved by him.
   Do not soften it, sharpen it, or add claims of your own.
 
-## Step 6 - Mark the thread processed
-
-Apply `TechNYC Processed` to the thread. Do this even when the digest had no
-funding section, and even when every company failed research. An unlabeled
-thread will be reprocessed tomorrow and can produce a duplicate draft.
-
-## Step 7 - Email Jesse the summary
+## Step 6 - Email Jesse the summary
 
 `Gmail: send_message` to `jesse@strausslawpllc.com`.
 
@@ -165,6 +178,11 @@ Body, plain and scannable:
 
 Close with the count and the reminder that nothing has been sent.
 
+Send this even on a run where every company failed research, and even where the
+digest had no funding section but a previous digest was worked. The summary is
+what records the date as done, so skipping it causes the next run to redo the
+work.
+
 ---
 
 ## Guardrails
@@ -175,5 +193,6 @@ Close with the count and the reminder that nothing has been sent.
   Every fact in a draft traces to the digest or to a page you actually read.
 - Never edit the pitch copy in `emailTemplate.js` as part of a run. If it needs
   to change, tell Jesse in the summary and let him decide.
-- Never process a thread already carrying `TechNYC Processed`.
+- Never draft for a company that already has an outreach draft or sent message.
+  There is no label to lean on; the check in Steps 1 and 5 is the only guard.
 - No em dashes in anything you write.
