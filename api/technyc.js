@@ -24,7 +24,35 @@ const LOOKBACK = "7d";
 // new companies before that so the run finishes cleanly and sends its summary
 // rather than being cut off mid-draft. Whatever is left is picked up by the
 // next run, which is safe because the work product is the state.
-const TIME_BUDGET_MS = 240000;
+const TIME_BUDGET_MS = 260000;
+
+// Companies are researched concurrently. Sequentially, two Claude calls per
+// company at high effort exhausted the budget by the third one: the September
+// 14 run cut Luminary's sweep short and never reached Sequen or Type at all.
+// The work is almost entirely waiting on other people's servers, so running a
+// few at once turns fifteen minutes of latency into about three. Kept modest
+// so a five-company digest does not hammer the Anthropic or Hunter rate limits.
+const CONCURRENCY = 4;
+
+/**
+ * Run fn over every item, at most `limit` in flight. Rejections are impossible
+ * here because fn captures its own errors; a throw would abandon the other
+ * workers mid-flight and lose their drafts.
+ */
+async function mapWithConcurrency(items, limit, fn) {
+  const queue = [...items.entries()];
+  const results = new Array(items.length);
+  const worker = async () => {
+    for (;;) {
+      const next = queue.shift();
+      if (!next) return;
+      const [index, item] = next;
+      results[index] = await fn(item, index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 function isAuthorized(req) {
   const expected = process.env.CRON_SECRET;
@@ -145,17 +173,17 @@ async function runPipeline() {
     outcome.digests.push({ subject: digest.subject, companies: rows.length });
     if (!rows.length) continue;
 
-    for (const row of rows) {
+    await mapWithConcurrency(rows, CONCURRENCY, async (row, order) => {
       if (Date.now() > deadline) {
-        outcome.skipped.push({ company: row.company, reason: "out of time this run, will retry on the next one" });
-        continue;
+        outcome.skipped.push({ order, company: row.company, reason: "out of time this run, will retry on the next one" });
+        return;
       }
 
       try {
         const prior = await existingWork(gmail, row.company);
         if (prior.state === "sent" || prior.state === "drafted") {
-          outcome.skipped.push({ company: row.company, reason: `already ${prior.state}` });
-          continue;
+          outcome.skipped.push({ order, company: row.company, reason: `already ${prior.state}` });
+          return;
         }
 
         const contact = await researchContact(row, { deadline });
@@ -173,16 +201,24 @@ async function runPipeline() {
           : await createDraft(authClient, payload);
 
         outcome.drafted.push({
+          order,
           row,
           contact,
           draftId: draft.id,
           completed: prior.state === "addressless",
         });
       } catch (err) {
-        outcome.failed.push({ company: row.company, error: err.message });
+        outcome.failed.push({ order, company: row.company, error: err.message });
       }
-    }
+    });
   }
+
+  // Concurrent workers finish out of order; the summary should still read in
+  // the order the digest listed the companies.
+  const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
+  outcome.drafted.sort(byOrder);
+  outcome.skipped.sort(byOrder);
+  outcome.failed.sort(byOrder);
 
   return { outcome, authClient };
 }

@@ -12,7 +12,8 @@ function describe(row, contact, draftId, completed) {
     bits.push("  no contact identified");
   }
   if (contact.email) {
-    bits.push(`  ${contact.email} (${contact.emailConfidence || "unlabeled"})`);
+    const via = contact.emailSource ? ` via ${contact.emailSource}` : "";
+    bits.push(`  ${contact.email} (${contact.emailConfidence || "unlabeled"}${via})`);
   } else {
     bits.push("  no address for this person, To: line is empty");
   }
