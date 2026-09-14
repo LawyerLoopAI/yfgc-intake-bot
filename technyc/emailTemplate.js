@@ -43,14 +43,17 @@ const LINKS = [
   { text: SITE, href: `https://${SITE}` },
 ];
 
-// Basis for the "preeminent" claim in PITCH. Fill this in and keep it current.
-// If it ever goes stale, soften PITCH rather than leaving the claim unsupported.
+// Basis for the "preeminent" claim in PITCH. Keep it current: if the support
+// ever goes stale, soften PITCH rather than leave the claim standing on its
+// own. New Rule 7.1 dropped the old substantiation-and-disclaimer machinery but
+// kept the bar on a materially misleading communication, so this note is the
+// file to point at if the claim is ever questioned.
 const SUBSTANTIATION = [
-  "2024 Crain's New York Business Notable General Counsel (recognition Jesse",
-  "already cites in his own email signature). Jesse to confirm the exact award",
-  "name and year, and add any further basis: years as in-house or outside GC,",
-  "count of venture-backed clients served, comparative pricing against large",
-  "firm hourly rates.",
+  "2024 Crain's New York Business Notable General Counsel. Confirmed by Jesse",
+  "on 2026-09-14; he also cites it in his own email signature. Add further",
+  "basis here as it accrues: years as in-house or outside GC, count of",
+  "venture-backed clients served, comparative pricing against large firm",
+  "hourly rates.",
 ].join(" ");
 
 const PRACTICE_AREAS =
