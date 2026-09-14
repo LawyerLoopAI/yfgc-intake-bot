@@ -27,10 +27,17 @@ reached Sequen or Type at all. The work is almost all waiting on other
 people's servers, so a few at once turns fifteen minutes of latency into about
 three.
 
-It runs as a Vercel cron at `/api/technyc`, 12:00 UTC Monday through Saturday,
-which is 8am ET in summer and 7am in winter. Digests land around 5:45pm ET on
-weekdays, so a morning run picks up the previous evening's issue and Monday
-catches Friday's.
+It runs as a Vercel cron at `/api/technyc`, **23:00 UTC Monday through
+Saturday**, which is 7pm EDT. Digests land around 5:45pm ET on weekdays, so the
+run picks up that same evening's issue about an hour later.
+
+**Daylight saving.** Vercel crons are UTC and have no DST awareness, so this
+fires at 7pm while Eastern is on EDT and at 6pm once it falls back to EST in
+November. Nothing breaks either way: the digest has already arrived by 6pm ET,
+and the seven-day lookback plus the drafts-as-state dedup mean a run at a
+slightly different hour changes nothing. To hold 7pm year round, change the
+hour to 0 (and the days to 2-7, since midnight UTC lands on the next calendar
+day) when EST begins.
 
 **The work product is the state.** The Gmail connector's scope covers reading,
 composing drafts and sending, but not writing labels, so the pipeline cannot
