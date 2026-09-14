@@ -74,6 +74,47 @@ const PITCH =
   "for routine work, or a black box AI firm with nobody accountable when you have a real problem. Have a look " +
   `at ${SITE} and see what we are about.`;
 
+// One sentence of Jesse's own relevant experience, keyed by the sector the
+// research step assigns. Inserted right after the practice-area paragraph.
+//
+// EMPTY BY DESIGN, and the sentence is omitted entirely when a sector has no
+// entry. Nothing here may be written by anyone but Jesse. An invented claim
+// about his background would be a materially misleading communication under
+// Rule 7.1, and unlike a wrong email address it would go out under his name
+// looking entirely plausible.
+//
+// Write each one as a complete sentence in his voice, for example:
+//   fintech: "I have spent most of the last decade on payments and lending
+//     work, including money transmitter licensing and bank partner
+//     agreements."
+const SECTOR_EXPERIENCE = {
+  "fintech": "",
+  "healthtech": "",
+  "proptech": "",
+  "legaltech": "",
+  "ai-infrastructure": "",
+  "devtools": "",
+  "enterprise-saas": "",
+  "marketplace": "",
+  "consumer": "",
+  "climate": "",
+  "security": "",
+  "biotech": "",
+  "logistics": "",
+  "edtech": "",
+  "media": "",
+  "other": "",
+};
+
+/**
+ * @param {string|null} sector
+ * @returns {string|null} the sentence to insert, or null to say nothing
+ */
+function experienceFor(sector) {
+  const line = SECTOR_EXPERIENCE[String(sector || "").toLowerCase()];
+  return line && line.trim() ? line.trim() : null;
+}
+
 const SIGNOFF = "Hope we can talk more!";
 
 const SIGNATURE = [
@@ -99,6 +140,7 @@ function buildOutreachEmail(funding) {
     valuationText,
     investors,
     contactFirstName,
+    sector,
   } = funding;
 
   const raise = [amountText, round].filter(Boolean).join(" ");
@@ -121,6 +163,7 @@ function buildOutreachEmail(funding) {
       .join(" "),
 
     PRACTICE_AREAS,
+    experienceFor(sector),
     OFFER,
     PITCH,
 
@@ -133,6 +176,8 @@ function buildOutreachEmail(funding) {
 
 module.exports = {
   buildOutreachEmail,
+  SECTOR_EXPERIENCE,
+  experienceFor,
   SIGNATURE,
   SIGNOFF,
   SITE,

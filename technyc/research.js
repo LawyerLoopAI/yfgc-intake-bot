@@ -9,14 +9,26 @@
 const { findEmail, siteDomain } = require("./findEmail");
 const { lookupEmail } = require("./emailProvider");
 
-const MODEL = "claude-opus-5";
+// Two models on purpose. Working out who runs a company is a lookup, and
+// Sonnet does it just as well for a fraction of the price. Finding a person's
+// email address is the hard, judgement-heavy half and the one that decides
+// whether a draft is usable, so that stays on Opus.
+const IDENTIFY_MODEL = "claude-sonnet-5";
+const EMAIL_MODEL = "claude-opus-5";
 
 // Dynamic-filtering variant, supported on Opus 5.
 const WEB_SEARCH_TOOL = {
   type: "web_search_20260209",
   name: "web_search",
-  max_uses: 10,
 };
+
+// Sector keys the outreach template can attach Jesse's experience to. A fixed
+// list, so the lookup in emailTemplate.js cannot silently miss.
+const SECTORS = [
+  "fintech", "healthtech", "proptech", "legaltech", "ai-infrastructure",
+  "devtools", "enterprise-saas", "marketplace", "consumer", "climate",
+  "security", "biotech", "logistics", "edtech", "media", "other",
+];
 
 // Stage one: who is this note addressed to.
 const IDENTIFY_SYSTEM = `You identify who runs a newly funded startup, so a lawyer can address a congratulations note correctly.
@@ -25,8 +37,12 @@ Find the CEO. Only if the company genuinely has no CEO, find the founder, or the
 
 Never invent a name or a title. If you cannot establish who it is, say so.
 
+Also classify what the company does into exactly one of these sectors, so the
+note can reference relevant experience: ${SECTORS.join(", ")}. Use "other" only
+when nothing else genuinely fits.
+
 Reply with a single JSON object and nothing else:
-{"fullName": string|null, "firstName": string|null, "title": string|null, "isCeo": boolean, "otherLeaders": string[], "sources": string[], "notes": string}`;
+{"fullName": string|null, "firstName": string|null, "title": string|null, "isCeo": boolean, "sector": string, "otherLeaders": string[], "sources": string[], "notes": string}`;
 
 // Stage two: find that specific person's address. Separated from stage one on
 // purpose. Folded together, the model treats the address as an afterthought
@@ -100,9 +116,9 @@ function collectText(content) {
 const RANK = { verified: 2, pattern: 1 };
 const rank = (confidence) => RANK[confidence] || 0;
 
-async function askForJson(client, system, prompt, maxUses, effort = "high") {
+async function askForJson(client, model, system, prompt, maxUses, effort = "high") {
   const response = await client.messages.create({
-    model: MODEL,
+    model,
     max_tokens: 16000,
     system,
     thinking: { type: "adaptive" },
@@ -139,12 +155,14 @@ async function researchContact(funding, deps = {}) {
   const result = {
     company,
     fullName: null, firstName: null, title: null, isCeo: false, otherLeaders: [],
+    sector: null,
     email: null, emailConfidence: null, emailSource: null, sources: [], searched: [], notes: "", errors: [],
   };
 
   // Stage 1: who.
   const who = await askForJson(
     client,
+    IDENTIFY_MODEL,
     IDENTIFY_SYSTEM,
     [
       `Company: ${company}`,
@@ -154,7 +172,7 @@ async function researchContact(funding, deps = {}) {
       "",
       "Who is the CEO? If there is no CEO, who is the founder?",
     ].filter(Boolean).join("\n"),
-    6,
+    5,
     "medium"
   );
   if (who.error) result.errors.push(who.error);
@@ -164,6 +182,7 @@ async function researchContact(funding, deps = {}) {
       firstName: who.parsed.firstName || null,
       title: who.parsed.title || null,
       isCeo: !!who.parsed.isCeo,
+      sector: SECTORS.includes(who.parsed.sector) ? who.parsed.sector : null,
       otherLeaders: who.parsed.otherLeaders || [],
       sources: who.parsed.sources || [],
       notes: who.parsed.notes || "",
@@ -179,6 +198,7 @@ async function researchContact(funding, deps = {}) {
   if (!deadline || Date.now() < deadline) {
     const mail = await askForJson(
       client,
+      EMAIL_MODEL,
       EMAIL_SYSTEM,
       [
         `Person: ${result.fullName}`,
@@ -188,7 +208,7 @@ async function researchContact(funding, deps = {}) {
         "",
         `Find ${result.fullName}'s own work email address.`,
       ].filter(Boolean).join("\n"),
-      12
+      8
     );
     if (mail.error) result.errors.push(mail.error);
     if (mail.parsed) {
@@ -254,4 +274,7 @@ async function researchContact(funding, deps = {}) {
   return result;
 }
 
-module.exports = { researchContact, extractJson, MODEL, WEB_SEARCH_TOOL, IDENTIFY_SYSTEM, EMAIL_SYSTEM };
+module.exports = {
+  researchContact, extractJson, SECTORS, WEB_SEARCH_TOOL,
+  IDENTIFY_MODEL, EMAIL_MODEL, IDENTIFY_SYSTEM, EMAIL_SYSTEM,
+};
