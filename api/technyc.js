@@ -30,7 +30,19 @@ const TRACKER_FOLDER_ID =
 // new companies before that so the run finishes cleanly and sends its summary
 // rather than being cut off mid-draft. Whatever is left is picked up by the
 // next run, which is safe because the work product is the state.
-const TIME_BUDGET_MS = 260000;
+// Vercel kills the function at maxDuration, currently 300s. The previous
+// design only checked the clock before STARTING a company, so one that began
+// at t=250 ran past the cap and killed the whole invocation. Drafts survived,
+// because they are written per company, but the sheet write and the summary
+// both happen at the end and were lost along with five minutes of API spend.
+//
+// Three layers now keep that from happening:
+//   WORK_BUDGET_MS   a watchdog that abandons in-flight research and proceeds
+//                    to the sheet and summary with whatever finished
+//   START_RESERVE_MS refuses to start a company without room to finish it
+//   the Anthropic client's own per-request timeout, in research.js
+const WORK_BUDGET_MS = 200000;
+const START_RESERVE_MS = 110000;
 
 // Companies are researched concurrently. Sequentially, two Claude calls per
 // company at high effort exhausted the budget by the third one: the September
@@ -38,7 +50,7 @@ const TIME_BUDGET_MS = 260000;
 // The work is almost entirely waiting on other people's servers, so running a
 // few at once turns fifteen minutes of latency into about three. Kept modest
 // so a five-company digest does not hammer the Anthropic or Hunter rate limits.
-const CONCURRENCY = 4;
+const CONCURRENCY = 5;
 
 /**
  * Run fn over every item, at most `limit` in flight. Rejections are impossible
@@ -147,7 +159,8 @@ async function sendSummary(authClient, subject, body) {
 }
 
 async function runPipeline() {
-  const deadline = Date.now() + TIME_BUDGET_MS;
+  const started = Date.now();
+  const deadline = started + WORK_BUDGET_MS;
   const authClient = await getAuthClient();
   const gmail = google.gmail({ version: "v1", auth: authClient });
 
@@ -156,6 +169,7 @@ async function runPipeline() {
   const seenSubjects = new Set();
   const outcome = { digests: [], drafted: [], skipped: [], failed: [] };
 
+  const work = (async () => {
   for (const { id } of messages) {
     let digest;
     try {
@@ -180,7 +194,8 @@ async function runPipeline() {
     if (!rows.length) continue;
 
     await mapWithConcurrency(rows, CONCURRENCY, async (row, order) => {
-      if (Date.now() > deadline) {
+      // Reserve enough time to actually finish, not merely to begin.
+      if (Date.now() > deadline - START_RESERVE_MS) {
         outcome.skipped.push({ order, company: row.company, reason: "out of time this run, will retry on the next one" });
         return;
       }
@@ -218,6 +233,25 @@ async function runPipeline() {
         outcome.failed.push({ order, company: row.company, error: err.message });
       }
     });
+  }
+
+  })();
+
+  // The watchdog is what guarantees Jesse gets a sheet row and a summary even
+  // when research overruns. Abandoned calls still finish and still cost money,
+  // but the invocation returns with its work product instead of being killed.
+  let timer;
+  const watchdog = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      outcome.timedOut = true;
+      resolve();
+    }, WORK_BUDGET_MS);
+  });
+  await Promise.race([work, watchdog]);
+  clearTimeout(timer);
+
+  if (outcome.timedOut) {
+    console.warn(`technyc: work budget reached after ${Math.round((Date.now() - started) / 1000)}s, writing what finished`);
   }
 
   // Concurrent workers finish out of order; the summary should still read in

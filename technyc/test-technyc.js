@@ -424,6 +424,13 @@ const completedSummary = buildSummary({
 ok("flags a draft that was filled in later", completedSummary.includes("filled in an earlier draft that had no address"));
 ok("says nothing about filling in for a fresh draft", !summary.includes("filled in an earlier draft"));
 ok("states nothing was sent", summary.includes("Nothing has been sent."));
+ok("says nothing about time when the run completed", !summary.includes("time budget"));
+
+// A run killed by the platform loses the sheet write and the summary, so the
+// watchdog returns early instead and the summary must admit it was cut short.
+const shortRun = buildSummary({ digests: [], drafted: [], skipped: [], failed: [], timedOut: true });
+ok("a short run says so", shortRun.includes("hit its time budget"));
+ok("and reassures that what is listed is saved", shortRun.includes("did finish and is saved"));
 ok("no em dash in the summary", !summary.includes("—"));
 
   runTrackerSuite();

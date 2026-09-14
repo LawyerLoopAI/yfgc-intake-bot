@@ -100,13 +100,13 @@ function collectText(content) {
 const RANK = { verified: 2, pattern: 1 };
 const rank = (confidence) => RANK[confidence] || 0;
 
-async function askForJson(client, system, prompt, maxUses) {
+async function askForJson(client, system, prompt, maxUses, effort = "high") {
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 16000,
     system,
     thinking: { type: "adaptive" },
-    output_config: { effort: "high" },
+    output_config: { effort },
     tools: [{ ...WEB_SEARCH_TOOL, max_uses: maxUses }],
     messages: [{ role: "user", content: prompt }],
   });
@@ -128,7 +128,9 @@ async function researchContact(funding, deps = {}) {
   const deadline = deps.deadline || null;
   // Required lazily, like googleapis in gmailDraft.js, so the pure helpers
   // here stay importable without the SDK installed.
-  const client = deps.client || new (require("@anthropic-ai/sdk"))();
+  // A per-request ceiling, so one unlucky research call cannot consume the
+  // whole function budget on its own. The SDK takes milliseconds.
+  const client = deps.client || new (require("@anthropic-ai/sdk"))({ timeout: 75000, maxRetries: 1 });
   const fetchImpl = deps.fetchImpl || globalThis.fetch;
 
   const { company, website, description, amountText, round } = funding;
@@ -152,7 +154,8 @@ async function researchContact(funding, deps = {}) {
       "",
       "Who is the CEO? If there is no CEO, who is the founder?",
     ].filter(Boolean).join("\n"),
-    6
+    6,
+    "medium"
   );
   if (who.error) result.errors.push(who.error);
   if (who.parsed) {

@@ -75,6 +75,13 @@ function buildSummary(outcome, tracker) {
     "",
   ];
 
+  if (outcome.timedOut) {
+    lines.push(
+      "This run hit its time budget and stopped early. Everything below did finish and is saved. Anything missing is picked up by the next run.",
+      ""
+    );
+  }
+
   if (ready.length) {
     lines.push("READY TO SEND", "");
     for (const d of ready) lines.push(describe(d.row, d.contact, d.draftId, d.completed), "");
