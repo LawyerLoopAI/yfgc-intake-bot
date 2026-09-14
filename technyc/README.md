@@ -17,7 +17,8 @@ Drafts only. Nothing is ever sent to a prospect automatically.
    draft is ready to send or homework.
 4. Build the email copy (`emailTemplate.js`) and create a Gmail draft from
    `jesse@yfgc.ai` (`gmailDraft.js`).
-5. Send Jesse one summary email (`summary.js`).
+5. Log every draft to a Google Sheet in Drive (`tracker.js`).
+6. Send Jesse one summary email (`summary.js`), carrying the sheet link.
 
 Companies are researched **concurrently**, four at a time. Run sequentially,
 two Claude calls per company at high effort exhausted the time budget by the
@@ -54,6 +55,7 @@ a `TechNYC Processed` label would be a cheaper check, but it is not required.
 | `research.js` | Identifies the CEO or founder via Claude's web search tool, then confirms the address with `findEmail.js` |
 | `gmailDraft.js` | Builds the draft as raw MIME so it can carry an explicit `From:` |
 | `summary.js` | Formats the run summary Jesse receives |
+| `tracker.js` | Finds or creates the Drive log sheet and upserts a row per company |
 | `../api/technyc.js` | The Vercel cron handler that runs the whole thing |
 | `fixtures/2026-09-10.txt` | A real digest section, trimmed, used by the tests |
 | `test-technyc.js` | Offline checks. No network, no API charges |
@@ -217,3 +219,40 @@ Gmail token needs `gmail.modify`, which `gmail/auth.js` already requests.
 
 One optional addition: `HUNTER_API_KEY`. Without it the pipeline runs exactly
 as before, just with more empty To: lines.
+
+## The tracking sheet
+
+Every drafted company gets a row in **TechNYC Outreach Log**, a Google Sheet in
+the Drive folder named by `TRACKER_FOLDER_ID`:
+
+| Date added | Digest | Company | Amount | Round | Contact | Title | Email address | Confidence | Found via | Status | Draft | Website |
+
+Two behaviours worth knowing.
+
+**Rows are upserted, not appended blindly.** A company is keyed on company plus
+digest date. A company first logged without an address gets that same row
+corrected when a later run finds one, rather than appearing twice. The same
+company raising again in a later digest is a genuinely new row.
+
+**Status never claims an email was sent.** This pipeline only drafts, so the
+column reads "Draft ready" or "Draft, needs an address". When a send step is
+added later it can update the row; writing "Sent" now would be a lie that gets
+hard to unpick.
+
+### Why the bot creates the sheet itself
+
+The OAuth token carries `drive.file`, which is per-file access to files **this
+application** created or opened. A spreadsheet created by anything else, a
+Claude Drive connector or Jesse clicking New in Drive, is invisible to this app
+and cannot be written to. So `ensureSheet` looks for its own sheet by name
+inside the folder and creates it on first run. Google accepts `drive.file` for
+the Sheets API on app-created files, so no broader scope is required.
+
+If the first run reports a permissions error against Sheets, the fallback is to
+add `https://www.googleapis.com/auth/spreadsheets` to `SCOPES` in
+`gmail/auth.js` and re-run `node auth-setup.js`. That grants access to every
+sheet in the account, which is why it is the fallback and not the default.
+
+A failure here is logged and swallowed. The drafts and the summary are the
+deliverable, and losing them to a spreadsheet problem would be the wrong
+trade.
