@@ -14,7 +14,7 @@ const {
   digestDate,
 } = require("../technyc/gmailQuery");
 const { buildSummary } = require("../technyc/summary");
-const { recordRuns, buildRow } = require("../technyc/tracker");
+const { recordRuns, buildRow, loadLedger, rowKey } = require("../technyc/tracker");
 
 const SOURCE_LABEL_ID = "Label_2387005531655631291"; // "TechNYC Emails"
 const FROM = "Jesse Strauss <jesse@yfgc.ai>";
@@ -164,6 +164,19 @@ async function runPipeline() {
   const authClient = await getAuthClient();
   const gmail = google.gmail({ version: "v1", auth: authClient });
 
+  // The ledger is the durable record of what has been dealt with, and reading
+  // it first is what stops a seven-day lookback re-researching the same
+  // companies every night. Every skip here is two Claude web-search calls not
+  // spent. A read failure is not fatal: fall back to the older draft-based
+  // checks rather than skipping the run.
+  let ledger = new Set();
+  try {
+    ledger = await loadLedger(authClient, TRACKER_FOLDER_ID);
+    console.log(`technyc: ledger holds ${ledger.size} companies already processed`);
+  } catch (err) {
+    console.warn(`technyc: could not read the ledger (${err.message}), falling back to draft checks`);
+  }
+
   const messages = await listSourceDigests(gmail);
   console.log(`technyc: ${messages.length} message(s) under the source label in the last ${LOOKBACK}`);
   const seenSubjects = new Set();
@@ -201,6 +214,13 @@ async function runPipeline() {
       }
 
       try {
+        // Cheapest check first: already in the ledger means already handled,
+        // whatever became of the draft afterwards.
+        if (ledger.has(rowKey(row.company, digestDate(digest.subject)))) {
+          outcome.skipped.push({ order, company: row.company, reason: "already processed, in the tracking sheet" });
+          return;
+        }
+
         const prior = await existingWork(gmail, row.company);
         if (prior.state === "sent" || prior.state === "drafted") {
           outcome.skipped.push({ order, company: row.company, reason: `already ${prior.state}` });
@@ -208,7 +228,11 @@ async function runPipeline() {
         }
 
         const contact = await researchContact(row, { deadline });
-        const email = buildOutreachEmail({ ...row, contactFirstName: contact.firstName });
+        const email = buildOutreachEmail({
+          ...row,
+          contactFirstName: contact.firstName,
+          sector: contact.sector,
+        });
         const payload = {
           from: FROM,
           to: contact.email || undefined,

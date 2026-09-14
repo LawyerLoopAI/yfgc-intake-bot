@@ -6,7 +6,7 @@ const path = require("path");
 const { parseFundingSection } = require("./parseFunding");
 const {
   buildOutreachEmail, SIGNATURE, SIGNOFF, SITE, LINKS, BOOKING_TEXT, BOOKING_URL,
-  CONTACT_EMAIL, SUBSTANTIATION,
+  CONTACT_EMAIL, SUBSTANTIATION, SECTOR_EXPERIENCE, experienceFor,
 } = require("./emailTemplate");
 
 let passed = 0;
@@ -123,6 +123,29 @@ ok("still states the amount", noName.body.includes("$30 million"));
 
 const noInvestors = buildOutreachEmail({ ...rows[2], contactFirstName: "Alex" });
 ok("omits investor sentence when none were listed", !/led the round/i.test(noInvestors.body));
+
+console.log("\nsector experience");
+// Every entry must stay empty in the repo. Only Jesse writes these: an
+// invented claim about his background would be a materially misleading
+// communication under Rule 7.1, and it would go out under his name looking
+// entirely plausible.
+ok(
+  "no experience claim is committed to the repo",
+  Object.values(SECTOR_EXPERIENCE).every((v) => v === "")
+);
+check("an empty sector contributes nothing", experienceFor("fintech"), null);
+check("an unknown sector contributes nothing", experienceFor("nonsense"), null);
+check("a null sector contributes nothing", experienceFor(null), null);
+
+const paragraphsWithout = buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "healthtech" }).body.split("\n\n").length;
+SECTOR_EXPERIENCE.healthtech = "I have done a lot of work in senior care and digital health.";
+const filled = buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "healthtech" });
+check("a filled sector adds exactly one paragraph", filled.body.split("\n\n").length, paragraphsWithout + 1);
+ok("and the sentence appears", filled.body.includes("senior care and digital health"));
+ok("placed after the practice areas", filled.body.indexOf("senior care") > filled.body.indexOf("legal questions pile up"));
+ok("and before the offer", filled.body.indexOf("senior care") < filled.body.indexOf("Two offers"));
+ok("a different sector does not pick it up", !buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector: "fintech" }).body.includes("senior care"));
+SECTOR_EXPERIENCE.healthtech = "";
 
 // Not a hard failure, because the pipeline works without it. It is a standing
 // reminder: new Rule 7.1 still bars a materially misleading communication, and
@@ -446,7 +469,7 @@ function runTrackerSuite() {
   const { buildRow, planWrites, rowKey, columnLetter, HEADERS } = require("./tracker");
 
   console.log("\ntracker");
-  check("header count matches the last column letter", columnLetter(HEADERS.length), "M");
+  check("header count matches the last column letter", columnLetter(HEADERS.length), "N");
 
   const withAddress = buildRow(
     {
@@ -461,32 +484,32 @@ function runTrackerSuite() {
   check("records the company", withAddress[2], "Inspiren");
   check("records the amount", withAddress[3], "$70 million");
   check("records the contact", withAddress[5], "Alex Hejnosz");
-  check("records the address", withAddress[7], "alex@inspiren.com");
-  check("records where it came from", withAddress[9], "hunter");
+  check("records the address", withAddress[8], "alex@inspiren.com");
+  check("records where it came from", withAddress[10], "hunter");
   // Nothing is sent by this pipeline, so the sheet must not claim otherwise.
-  check("status is honest about drafts", withAddress[10], "Draft ready");
-  ok("links the draft", withAddress[11].includes("r123"));
+  check("status is honest about drafts", withAddress[11], "Draft ready");
+  ok("links the draft", withAddress[12].includes("r123"));
 
   const without = buildRow(
     { row: { company: "Sequen", amountText: "$90 million", round: "Series B" }, contact: { fullName: "Zoe Weil", title: "CEO" }, draftId: "r9" },
     "September 14",
     "2026-09-14"
   );
-  check("status flags a missing address", without[10], "Draft, needs an address");
-  check("leaves the address blank rather than inventing one", without[7], "");
+  check("status flags a missing address", without[11], "Draft, needs an address");
+  check("leaves the address blank rather than inventing one", without[8], "");
 
   console.log("\ntracker: upsert");
   const header = HEADERS;
   const existingNoAddress = [
     header,
-    ["2026-09-14", "September 14", "Inspiren", "$70 million", "Series C", "Alex Hejnosz", "CEO", "", "", "", "Draft, needs an address", "", ""],
+    ["2026-09-14", "September 14", "Inspiren", "$70 million", "Series C", "Alex Hejnosz", "CEO", "healthtech", "", "", "", "Draft, needs an address", "", ""],
   ];
   // A company logged without an address gets revisited later. When one turns
   // up the row must be corrected, not duplicated.
   let plan = planWrites(existingNoAddress, [withAddress]);
   check("corrects the existing row", plan.updates.map((u) => u.rowNumber), [2]);
   check("adds nothing new", plan.appends.length, 0);
-  check("the correction carries the address", plan.updates[0].values[7], "alex@inspiren.com");
+  check("the correction carries the address", plan.updates[0].values[8], "alex@inspiren.com");
 
   plan = planWrites([header], [withAddress, without]);
   check("appends both when the sheet is empty", plan.appends.length, 2);

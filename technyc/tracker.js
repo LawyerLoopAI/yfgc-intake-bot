@@ -20,6 +20,7 @@ const HEADERS = [
   "Round",
   "Contact",
   "Title",
+  "Sector",
   "Email address",
   "Confidence",
   "Found via",
@@ -50,6 +51,7 @@ function buildRow(entry, digest, today) {
     row.round || "",
     contact.fullName || "",
     contact.title || "",
+    contact.sector || "",
     contact.email || "",
     contact.emailConfidence || "",
     contact.emailSource || "",
@@ -239,6 +241,55 @@ async function ensureSheet(authClient, folderId) {
 }
 
 /**
+ * Read the ledger of everything ever processed.
+ *
+ * This is the durable answer to "have we dealt with this company", and it is
+ * better than the one it replaces. Drafts and sent mail only recorded work
+ * that still exists: deleting a draft, which is exactly how Jesse says "not
+ * this one", erased the evidence and the next run re-researched and re-drafted
+ * the same company. The sheet remembers regardless.
+ *
+ * Returns an empty set when no sheet exists yet, and never creates one, so a
+ * first run is cheap and a read failure never blocks the actual work.
+ *
+ * @returns {Promise<Set<string>>} keys from rowKey(company, digest)
+ */
+async function loadLedger(authClient, folderId) {
+  const { google } = require("googleapis");
+  const drive = google.drive({ version: "v3", auth: authClient });
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+
+  const found = await drive.files.list({
+    q: `name='${SHEET_NAME}' and '${folderId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+    fields: "files(id)",
+    pageSize: 5,
+  });
+  const hit = (found.data.files || [])[0];
+  if (!hit) return new Set();
+
+  let values;
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: hit.id,
+      range: `${TAB}!A:C`,
+    });
+    values = res.data.values || [];
+  } catch {
+    // A sheet that exists but has no Outreach tab yet is a first run in
+    // disguise. Treat it as an empty ledger rather than failing the run.
+    return new Set();
+  }
+
+  const keys = new Set();
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i] || [];
+    const key = rowKey(r[2], r[1]);
+    if (key !== "|") keys.add(key);
+  }
+  return keys;
+}
+
+/**
  * Write the day's rows, updating any that already exist.
  * @returns {Promise<{added: number, updated: number, url: string}>}
  */
@@ -278,4 +329,4 @@ async function recordRuns(authClient, folderId, incoming) {
   return { added: appends.length, updated: updates.length, url };
 }
 
-module.exports = { ensureSheet, ensureLayout, recordRuns, buildRow, planWrites, rowKey, columnLetter, HEADERS, SHEET_NAME, TAB };
+module.exports = { ensureSheet, ensureLayout, loadLedger, recordRuns, buildRow, planWrites, rowKey, columnLetter, HEADERS, SHEET_NAME, TAB };

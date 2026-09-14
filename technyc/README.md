@@ -136,10 +136,16 @@ sending nothing.
 
 Three sources, in order:
 
-1. **Identify the person** (`research.js`, stage one). CEO, or the founder only
-   where there is no CEO.
-2. **Search for that person's address** (`research.js`, stage two). A separate
-   call with its own search budget, because folded into stage one the model
+0. **Skip anything already in the tracking sheet.** The sheet is the ledger of
+   everything ever processed, so a seven-day lookback costs nothing after the
+   first night and a company is never researched twice. Delete its row to force
+   a retry.
+1. **Identify the person** (`research.js`, stage one). Claude Sonnet 5 at medium
+   effort. CEO, or the founder only where there is no CEO. Also classifies the
+   company into a sector.
+2. **Search for that person's address** (`research.js`, stage two). Claude
+   Opus 5 at high effort, because this is the half that decides whether a draft
+   is usable. A separate call with its own search budget, because folded into stage one the model
    treats the address as an afterthought and settles for the first inbox it
    sees. It is pointed at the places a real address actually appears: staff
    listings, the funding press release contact when it names this person, SEC
@@ -263,3 +269,36 @@ sheet in the account, which is why it is the fallback and not the default.
 A failure here is logged and swallowed. The drafts and the summary are the
 deliverable, and losing them to a spreadsheet problem would be the wrong
 trade.
+
+## Cost
+
+Three things keep the bill down, in order of how much they matter.
+
+**The ledger.** Before the change, a seven-day lookback meant every company in
+every digest was re-researched every night for a week: roughly seven times the
+necessary work, and the reason drafts kept reappearing for companies Jesse had
+already dealt with. Now a company is researched once, ever. Deleting its row in
+the sheet is how you ask for a retry.
+
+**Two models.** Working out who runs a company is a lookup, so stage one uses
+Claude Sonnet 5 at medium effort. Finding a person's email address is the hard
+half and the one that decides whether a draft is usable, so stage two stays on
+Claude Opus 5 at high effort.
+
+**Fewer searches.** `max_uses` is 5 for identification and 8 for the address
+hunt, down from 10 and 12.
+
+Steady state is one identification and one address hunt per genuinely new
+company, about five a day.
+
+## Tailoring the copy to a sector
+
+`SECTOR_EXPERIENCE` in `emailTemplate.js` holds one sentence of Jesse's own
+relevant experience per sector, inserted after the practice-area paragraph. The
+research step classifies each company; a sector with no entry contributes
+nothing and the email is unchanged.
+
+**Every entry ships empty, and a test enforces that.** Only Jesse writes these.
+An invented claim about his background would be a materially misleading
+communication under Rule 7.1, and unlike a wrong email address it would go out
+under his name looking entirely plausible.
