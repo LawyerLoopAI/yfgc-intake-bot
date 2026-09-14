@@ -109,7 +109,94 @@ function columnLetter(n) {
 const LAST_COLUMN = columnLetter(HEADERS.length);
 
 /**
- * Find this app's log sheet inside a folder, creating it on first use.
+ * Make sure the spreadsheet has the tab and headers this module expects.
+ *
+ * Deliberately idempotent, and separated from creation, because the two used
+ * to be one path and that broke badly. The first attempt created the Drive
+ * file and then died on the Sheets call, leaving a spreadsheet whose only tab
+ * was still the default "Sheet1". The next run found that file, assumed a
+ * found sheet must be a finished sheet, and returned early, so every write
+ * afterwards failed with "Unable to parse range: Outreach!A:M". Running the
+ * setup every time costs one extra read and makes a half-built sheet repair
+ * itself.
+ */
+async function ensureLayout(sheets, spreadsheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const existing = meta.data.sheets || [];
+  let tab = existing.find((sh) => sh.properties && sh.properties.title === TAB);
+
+  if (!tab) {
+    // A brand-new spreadsheet has exactly one default tab, so rename it rather
+    // than leaving an empty "Sheet1" behind. Anything else gets a new tab.
+    if (existing.length === 1) {
+      const first = existing[0].properties;
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              updateSheetProperties: {
+                properties: { sheetId: first.sheetId, title: TAB, gridProperties: { frozenRowCount: 1 } },
+                fields: "title,gridProperties.frozenRowCount",
+              },
+            },
+          ],
+        },
+      });
+      tab = { properties: { ...first, title: TAB } };
+    } else {
+      const added = await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [{ addSheet: { properties: { title: TAB, gridProperties: { frozenRowCount: 1 } } } }],
+        },
+      });
+      tab = { properties: added.data.replies[0].addSheet.properties };
+    }
+  }
+
+  const sheetId = tab.properties.sheetId;
+
+  // Header row, written only when it is missing or wrong, so a run never
+  // clobbers a sheet Jesse has reordered or annotated.
+  const firstRow = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${TAB}!A1:${LAST_COLUMN}1`,
+  });
+  const current = (firstRow.data.values || [])[0] || [];
+  if (current.join("\u0000") !== HEADERS.join("\u0000")) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${TAB}!A1:${LAST_COLUMN}1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [HEADERS] },
+    });
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            repeatCell: {
+              range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+              cell: { userEnteredFormat: { textFormat: { bold: true } } },
+              fields: "userEnteredFormat.textFormat.bold",
+            },
+          },
+          {
+            updateSheetProperties: {
+              properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+              fields: "gridProperties.frozenRowCount",
+            },
+          },
+        ],
+      },
+    });
+  }
+}
+
+/**
+ * Find this app's log sheet inside a folder, creating it on first use, and
+ * make sure its layout is right either way.
  * @returns {Promise<{spreadsheetId: string, url: string, created: boolean}>}
  */
 async function ensureSheet(authClient, folderId) {
@@ -126,49 +213,29 @@ async function ensureSheet(authClient, folderId) {
   });
 
   const hit = (found.data.files || [])[0];
+  let spreadsheetId;
+  let url;
+  let created = false;
+
   if (hit) {
-    return {
-      spreadsheetId: hit.id,
-      url: hit.webViewLink || `https://docs.google.com/spreadsheets/d/${hit.id}`,
-      created: false,
-    };
+    spreadsheetId = hit.id;
+    url = hit.webViewLink || `https://docs.google.com/spreadsheets/d/${hit.id}`;
+  } else {
+    const file = await drive.files.create({
+      requestBody: {
+        name: SHEET_NAME,
+        mimeType: "application/vnd.google-apps.spreadsheet",
+        parents: [folderId],
+      },
+      fields: "id,webViewLink",
+    });
+    spreadsheetId = file.data.id;
+    url = file.data.webViewLink || `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+    created = true;
   }
 
-  const file = await drive.files.create({
-    requestBody: {
-      name: SHEET_NAME,
-      mimeType: "application/vnd.google-apps.spreadsheet",
-      parents: [folderId],
-    },
-    fields: "id,webViewLink",
-  });
-  const spreadsheetId = file.data.id;
-
-  const meta = await sheets.spreadsheets.get({ spreadsheetId });
-  const firstSheet = meta.data.sheets[0].properties;
-
-  await sheets.spreadsheets.batchUpdate({
-    spreadsheetId,
-    requestBody: {
-      requests: [
-        { updateSheetProperties: { properties: { sheetId: firstSheet.sheetId, title: TAB, gridProperties: { frozenRowCount: 1 } }, fields: "title,gridProperties.frozenRowCount" } },
-        { repeatCell: { range: { sheetId: firstSheet.sheetId, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat.textFormat.bold" } },
-      ],
-    },
-  });
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `${TAB}!A1:${LAST_COLUMN}1`,
-    valueInputOption: "RAW",
-    requestBody: { values: [HEADERS] },
-  });
-
-  return {
-    spreadsheetId,
-    url: file.data.webViewLink || `https://docs.google.com/spreadsheets/d/${spreadsheetId}`,
-    created: true,
-  };
+  await ensureLayout(sheets, spreadsheetId);
+  return { spreadsheetId, url, created };
 }
 
 /**
@@ -211,4 +278,4 @@ async function recordRuns(authClient, folderId, incoming) {
   return { added: appends.length, updated: updates.length, url };
 }
 
-module.exports = { ensureSheet, recordRuns, buildRow, planWrites, rowKey, columnLetter, HEADERS, SHEET_NAME, TAB };
+module.exports = { ensureSheet, ensureLayout, recordRuns, buildRow, planWrites, rowKey, columnLetter, HEADERS, SHEET_NAME, TAB };
