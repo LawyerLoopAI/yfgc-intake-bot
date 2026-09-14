@@ -329,6 +329,28 @@ check("emits exactly three anchors", (linked.match(/<a /g) || []).length, 3);
 ok("leaves no placeholder sentinels behind", !linked.includes(String.fromCharCode(57344)));
 ok("does not nest anchors", !/<a [^>]*>[^<]*<a /.test(linked));
 
+console.log("\ngmailQuery");
+const {
+  sourceListParams, outreachSubjectQuery, summarySentQuery, digestDate,
+} = require("./gmailQuery");
+
+// The bug this guards: a label ID inside q silently matches nothing on the raw
+// Gmail API, which returns a healthy-looking empty result. It must go through
+// the labelIds parameter instead.
+const params = sourceListParams("Label_2387005531655631291", "7d");
+check("filters by labelIds, not by a label: term in q", params.labelIds, ["Label_2387005531655631291"]);
+ok("keeps the label ID out of q entirely", !params.q.includes("Label_"));
+ok("q carries only the time window", params.q === "newer_than:7d");
+check("asks for the user's own mailbox", params.userId, "me");
+
+check("outreach subject query", outreachSubjectQuery("Inspiren"), 'subject:"Congratulations on Inspiren\'s"');
+// Gmail's q grammar cannot escape a quote inside a quoted phrase, so a company
+// name containing one must not be allowed to break out of the phrase.
+ok("strips quotes from a company name", !outreachSubjectQuery('Ac"me').includes('Ac"me'));
+check("summary sent query", summarySentQuery("September 10"), 'in:sent subject:"TechNYC outreach" "(September 10)"');
+check("digest date", digestDate("Tech:NYC Digest: September 10"), "September 10");
+check("digest date when the prefix is absent", digestDate("Something else"), "Something else");
+
 console.log("\nbuildSummary");
 const { buildSummary } = require("./summary");
 const summary = buildSummary({

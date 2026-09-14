@@ -7,6 +7,12 @@ const { parseFundingSection } = require("../technyc/parseFunding");
 const { buildOutreachEmail, LINKS } = require("../technyc/emailTemplate");
 const { researchContact } = require("../technyc/research");
 const { createDraft, updateDraft, textToHtml } = require("../technyc/gmailDraft");
+const {
+  sourceListParams,
+  outreachSubjectQuery,
+  summarySentQuery,
+  digestDate,
+} = require("../technyc/gmailQuery");
 const { buildSummary } = require("../technyc/summary");
 
 const SOURCE_LABEL_ID = "Label_2387005531655631291"; // "TechNYC Emails"
@@ -34,6 +40,11 @@ async function search(gmail, q, limit = 25) {
   return res.data.messages || [];
 }
 
+async function listSourceDigests(gmail) {
+  const res = await gmail.users.messages.list(sourceListParams(SOURCE_LABEL_ID, LOOKBACK));
+  return res.data.messages || [];
+}
+
 /**
  * What, if anything, already exists for this company?
  *
@@ -51,7 +62,7 @@ async function search(gmail, q, limit = 25) {
  * @returns {Promise<{state: "sent"|"drafted"|"addressless"|"none", draftId?: string}>}
  */
 async function existingWork(gmail, company) {
-  const subject = `subject:"Congratulations on ${company}'s"`;
+  const subject = outreachSubjectQuery(company);
 
   const sent = await search(gmail, `${subject} in:sent`, 1);
   if (sent.length) return { state: "sent" };
@@ -72,9 +83,9 @@ async function existingWork(gmail, company) {
 }
 
 async function summaryAlreadySent(gmail, digestSubject) {
-  const date = digestSubject.replace(/^Tech:NYC Digest:\s*/i, "").trim();
+  const date = digestDate(digestSubject);
   if (!date) return false;
-  const hits = await search(gmail, `in:sent subject:"TechNYC outreach" "(${date})"`, 1);
+  const hits = await search(gmail, summarySentQuery(date), 1);
   return hits.length > 0;
 }
 
@@ -106,7 +117,8 @@ async function runPipeline() {
   const authClient = await getAuthClient();
   const gmail = google.gmail({ version: "v1", auth: authClient });
 
-  const messages = await search(gmail, `label:${SOURCE_LABEL_ID} newer_than:${LOOKBACK}`, 25);
+  const messages = await listSourceDigests(gmail);
+  console.log(`technyc: ${messages.length} message(s) under the source label in the last ${LOOKBACK}`);
   const seenSubjects = new Set();
   const outcome = { digests: [], drafted: [], skipped: [], failed: [] };
 
