@@ -33,9 +33,11 @@ const SITE = "yfgc.ai";
 // Basis for the "preeminent" claim in PITCH. Fill this in and keep it current.
 // If it ever goes stale, soften PITCH rather than leaving the claim unsupported.
 const SUBSTANTIATION = [
-  "TODO(jesse): record the basis for the 'preeminent' claim here, for example",
-  "years serving as in-house or outside GC, number of venture-backed clients",
-  "served, any published rating and its source, or comparative pricing data.",
+  "2024 Crain's New York Business Notable General Counsel (recognition Jesse",
+  "already cites in his own email signature). Jesse to confirm the exact award",
+  "name and year, and add any further basis: years as in-house or outside GC,",
+  "count of venture-backed clients served, comparative pricing against large",
+  "firm hourly rates.",
 ].join(" ");
 
 const PRACTICE_AREAS =
@@ -60,7 +62,7 @@ const SIGNATURE = [
   "Jesse Strauss",
   "Strauss Law PLLC",
   "765 Amsterdam Avenue, 5E | New York, NY 10024",
-  "jesse@strausslawpllc.com | 917-541-8428",
+  "jesse@yfgc.ai | 917-541-8428",
 ].join("\n");
 
 // ---------------------------------------------------------------------------

@@ -196,6 +196,12 @@ Then `Gmail: create_draft` with:
 - `htmlBody`: the same text with `<br>` line breaks and the site as a real
   anchor, `<a href="https://yfgc.ai">yfgc.ai</a>`
 
+**The connector cannot set the From address.** `create_draft` takes no sender
+field, so drafts go out as whatever the Gmail account's default Send-mail-as
+identity is. Jesse wants these from `jesse@yfgc.ai`, which is a verified alias
+on the account. If the default is something else, say so in the summary rather
+than assuming he will notice.
+
 **Always send `htmlBody`, not `body` alone.** Gmail linkifies a bare domain in
 a plain-text draft and writes its own redirect into the saved body, so the
 recipient sees `https://www.google.com/url?q=...` where the site name should
