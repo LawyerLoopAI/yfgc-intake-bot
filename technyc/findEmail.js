@@ -6,15 +6,19 @@
 // and the evidence behind it, so the summary email can tell him which addresses
 // are safe to send blind and which want a glance first.
 //
+// THE RULE: an address counts only if it maps to the named person. A generic
+// inbox is not a weaker answer, it is the wrong answer. An earlier version
+// treated press@ and hello@ as an acceptable fallback and swept the privacy
+// policy page for addresses, which reliably produced privacy@company.com.
+// Mailing a founder's privacy alias to congratulate them on a raise is worse
+// than sending nothing, so those are now rejected outright.
+//
 // Confidence levels:
-//   "verified" - the address was read off a page, and its local part matches
-//                the person's name
-//   "role"     - a real published address, but a shared inbox (press@, hello@),
-//                so the salutation carries the person's name and the mail goes
-//                to a desk rather than to them
+//   "verified" - read off a page, and its local part matches the person's name
 //   "pattern"  - constructed from the person's name using an address shape seen
-//                at least twice at that domain. Plausible, not confirmed.
-//   null       - nothing found. Draft goes out with an empty To: line.
+//                on at least two OTHER personal addresses at that domain.
+//                An inference from evidence, not a guess.
+//   null       - nothing that belongs to this person. Empty To: line.
 //
 // NETWORK: this module needs to reach arbitrary company websites. It cannot run
 // inside the Claude Code sandbox, whose egress proxy allows only an allowlist.
@@ -29,12 +33,12 @@ const ROLE_LOCAL_PARTS = new Set([
   "noreply", "no-reply", "donotreply", "mailer-daemon", "postmaster", "webmaster",
 ]);
 
-// Ordered by how much a hit tells us. Contact and team pages name people;
-// privacy and terms pages almost always carry a real monitored address.
+// Pages where a company publishes people. Privacy, terms and legal pages are
+// deliberately absent: they publish compliance inboxes and nothing else, so
+// they cost time and supply exactly the kind of address we now reject.
 const CANDIDATE_PATHS = [
   "/", "/contact", "/contact-us", "/about", "/about-us", "/team", "/our-team",
   "/leadership", "/company", "/people", "/press", "/newsroom", "/media",
-  "/privacy", "/privacy-policy", "/legal", "/terms", "/terms-of-service",
 ];
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
@@ -224,43 +228,49 @@ async function findEmail({
 
   const addresses = [...collected];
   if (!addresses.length) {
-    return { email: null, confidence: null, evidence, notes: ["no addresses published on the site"] };
+    return { email: null, confidence: null, evidence, notes: [...notes, "no addresses published on the site"], rejected: [] };
+  }
+  if (!parts) {
+    return { email: null, confidence: null, evidence, notes: [...notes, "no usable person name to match against"], rejected: addresses };
   }
 
   // 1. An address that is demonstrably this person's.
-  if (parts) {
-    for (const addr of addresses) {
-      const local = localPart(addr);
-      for (const shape of Object.keys(SHAPES)) {
-        if (matchesShape(local, shape, parts)) {
-          return { email: addr, confidence: "verified", evidence, notes };
-        }
+  for (const addr of addresses) {
+    const local = localPart(addr);
+    for (const shape of Object.keys(SHAPES)) {
+      if (matchesShape(local, shape, parts)) {
+        return { email: addr, confidence: "verified", evidence, notes, rejected: [] };
       }
     }
   }
 
-  // 2. Their convention applied to this person's name.
-  if (parts) {
-    const inferred = inferShape(addresses);
-    if (inferred) {
-      const candidate = `${SHAPES[inferred.shape](parts)}@${domain}`;
-      notes.push(
-        `constructed as ${inferred.shape} from the pattern at ${domain}, seen in ` +
-          inferred.basis.join(" and ")
-      );
-      return { email: candidate, confidence: "pattern", evidence, notes };
-    }
-    notes.push("no repeated address pattern to infer from");
+  // 2. Their colleagues' addresses reveal the convention; apply it to this
+  //    person. Role addresses are excluded from the inference, so a page full
+  //    of info@ and privacy@ yields nothing rather than a false pattern.
+  const inferred = inferShape(addresses);
+  if (inferred) {
+    return {
+      email: `${SHAPES[inferred.shape](parts)}@${domain}`,
+      confidence: "pattern",
+      evidence,
+      notes: [
+        ...notes,
+        `built as ${inferred.shape}, the convention at ${domain}, seen in ${inferred.basis.join(" and ")}`,
+      ],
+      rejected: [],
+    };
   }
 
-  // 3. A real desk that will read it, with the person named in the salutation.
-  const role = addresses.find(isRoleAddress);
-  if (role) {
-    notes.push("shared inbox, not the person directly");
-    return { email: role, confidence: "role", evidence, notes };
-  }
+  // 3. Nothing here belongs to this person. Say what was found and why it was
+  //    not used, so the summary can tell Jesse where a human should look.
+  const generic = addresses.filter(isRoleAddress);
+  const otherPeople = addresses.filter((a) => !isRoleAddress(a));
+  const why = [];
+  if (generic.length) why.push(`only generic inboxes on the site (${generic.join(", ")})`);
+  if (otherPeople.length === 1) why.push(`one other personal address (${otherPeople[0]}), too few to infer a convention`);
+  if (!why.length) why.push("no address on the site belongs to this person");
 
-  return { email: null, confidence: null, evidence, notes };
+  return { email: null, confidence: null, evidence, notes: [...notes, ...why], rejected: addresses };
 }
 
 module.exports = {
