@@ -49,11 +49,18 @@ a `TechNYC Processed` label would be a cheaper check, but it is not required.
 | `../api/technyc.js` | The Vercel cron handler that runs the whole thing |
 | `fixtures/2026-09-10.txt` | A real digest section, trimmed, used by the tests |
 | `test-technyc.js` | Offline checks. No network, no API charges |
+| `dry-run.js` | Prints a full sample run with the network stubbed |
 | `../.claude/skills/technyc-outreach/SKILL.md` | The step-by-step procedure the scheduled run follows |
 
 ```bash
-node technyc/test-technyc.js
+node technyc/test-technyc.js   # offline checks
+node technyc/dry-run.js        # what a real run produces, network stubbed
 ```
+
+`dry-run.js` drives the whole production path against the September 10 fixture
+with only the two network calls stubbed, and prints the parsed companies, the
+draft headers, one draft in full, and the summary email. Use it to review copy
+changes before they reach a founder.
 
 ## Editing the pitch
 

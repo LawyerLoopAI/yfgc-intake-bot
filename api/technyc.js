@@ -11,7 +11,7 @@ const { buildSummary } = require("../technyc/summary");
 
 const SOURCE_LABEL_ID = "Label_2387005531655631291"; // "TechNYC Emails"
 const FROM = "Jesse Strauss <jesse@yfgc.ai>";
-const SUMMARY_TO = "jesse@strausslawpllc.com";
+const SUMMARY_TO = "jesse@yfgc.ai";
 const LOOKBACK = "7d";
 
 function isAuthorized(req) {
