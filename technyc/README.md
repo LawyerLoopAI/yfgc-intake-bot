@@ -13,10 +13,16 @@ Drafts only. Nothing is ever sent to a prospect automatically.
 1. Find threads labeled `TechNYC Emails` from the last seven days.
 2. Parse the New York Funding section (`parseFunding.js`).
 3. Research each company's CEO or founder, then find their email address
-   (`findEmail.js`). This is the step that decides whether a draft is ready to
-   send or homework.
-4. Build the email copy (`emailTemplate.js`) and create a Gmail draft.
-5. Send Jesse one summary email.
+   (`research.js` + `findEmail.js`). This is the step that decides whether a
+   draft is ready to send or homework.
+4. Build the email copy (`emailTemplate.js`) and create a Gmail draft from
+   `jesse@yfgc.ai` (`gmailDraft.js`).
+5. Send Jesse one summary email (`summary.js`).
+
+It runs as a Vercel cron at `/api/technyc`, 12:00 UTC Monday through Saturday,
+which is 8am ET in summer and 7am in winter. Digests land around 5:45pm ET on
+weekdays, so a morning run picks up the previous evening's issue and Monday
+catches Friday's.
 
 **The work product is the state.** The Gmail connector's scope covers reading,
 composing drafts and sending, but not writing labels, so the pipeline cannot
@@ -37,6 +43,10 @@ a `TechNYC Processed` label would be a cheaper check, but it is not required.
 | `parseFunding.js` | Pulls structured company records out of the digest's plain-text body |
 | `emailTemplate.js` | The approved outreach copy, plus the signature block and the substantiation note |
 | `findEmail.js` | Sweeps a company's site for published addresses and resolves one for a named person |
+| `research.js` | Identifies the CEO or founder via Claude's web search tool, then confirms the address with `findEmail.js` |
+| `gmailDraft.js` | Builds the draft as raw MIME so it can carry an explicit `From:` |
+| `summary.js` | Formats the run summary Jesse receives |
+| `../api/technyc.js` | The Vercel cron handler that runs the whole thing |
 | `fixtures/2026-09-10.txt` | A real digest section, trimmed, used by the tests |
 | `test-technyc.js` | Offline checks. No network, no API charges |
 | `../.claude/skills/technyc-outreach/SKILL.md` | The step-by-step procedure the scheduled run follows |
@@ -103,26 +113,32 @@ found one. One sample is never a pattern, and a shape never seen at the domain
 is never invented. Everything else is fair game, because a draft addressed to
 nobody is a draft Jesse has to finish by hand.
 
-### It cannot run in the Claude Code sandbox
+### Why this runs on Vercel and not in a Claude Code session
 
-`findEmail.js` needs to reach arbitrary company websites, and the sandbox's
-egress proxy allows only an allowlist. Company sites are not on it:
+`findEmail.js` needs to reach arbitrary company websites, and the Claude Code
+sandbox's egress proxy allows only an allowlist. Company sites are not on it:
 
 ```
 $ curl -o /dev/null -w '%{http_code}' https://inspiren.com/
 000
 ```
 
-Search still works there, so a run inside the sandbox can identify the person
-but usually cannot find their address. Two ways to fix that:
+Every domain in the September 10 digest returned the same. Search still works
+there, so a sandbox run can identify the person but not find their address,
+which is the half that matters. Vercel has open outbound HTTPS, so the site
+sweep works and `research.js` can use Claude's server-side `web_search` tool.
 
-1. **Run it from the Vercel deployment.** This repo already deploys there with
-   open outbound HTTPS. Pass the platform `fetch` as `fetchImpl`. This is the
-   better home for the pipeline long term.
-2. **Use an environment whose network policy permits general browsing.** See
-   https://code.claude.com/docs/en/claude-code-on-the-web for how the network
-   policy is chosen when an environment is created.
+Running here also solves the sender identity. The Gmail MCP connector has no
+`from` parameter, so drafts it creates inherit the account's default send-as
+address. `gmailDraft.js` builds raw MIME with an explicit `From:` header, which
+Gmail honours because `jesse@yfgc.ai` is a verified alias on the account.
 
 A commercial finder (Hunter.io, Apollo, Clearbit) would raise the hit rate
 further and slots in ahead of the site sweep, but it needs an API key and a
 budget, so it is not wired in.
+
+### Environment
+
+Beyond what `/api/process` already needs, this adds nothing: it reuses
+`ANTHROPIC_API_KEY`, the Google OAuth variables, and `CRON_SECRET`. The Gmail
+token needs `gmail.modify`, which `gmail/auth.js` already requests.

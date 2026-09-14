@@ -55,6 +55,32 @@ console.log("\nparseFundingSection: no section present");
 check("returns empty array", parseFundingSection("A Friday digest with no funding section."), []);
 check("tolerates empty input", parseFundingSection(""), []);
 
+console.log("\nparseFundingSection: header lost to the HTML fallback");
+// gmail/parser.js falls back to stripped HTML when a digest has no text/plain
+// part, and stripping drops the image alt text that marks the section.
+const strippedHeading = [
+  "New York Funding",
+  "",
+  "* [Axle](https://www.axle.insure/), an NYC-based insurance data platform, raised $18 million in Series A funding. Anthemis led the round.",
+].join("\n");
+check("a bare heading still marks the section", parseFundingSection(strippedHeading).map((r) => r.company), ["Axle"]);
+
+const noHeadingAtAll = [
+  "* Some prose bullet about [Remepy](https://remepy.com/) with no raise in it.",
+  "",
+  "* [PineGap](https://pinegap.ai), an NYC-based asset management platform, raised $23 million in Series A funding.",
+].join("\n");
+check(
+  "falls back to funding-shaped bullets when the header is gone entirely",
+  parseFundingSection(noHeadingAtAll).map((r) => r.company),
+  ["PineGap"]
+);
+check(
+  "the fallback still ignores prose bullets with no raise",
+  parseFundingSection(noHeadingAtAll).some((r) => r.company === "Remepy"),
+  false
+);
+
 console.log("\nbuildOutreachEmail");
 const withName = buildOutreachEmail({ ...rows[1], contactFirstName: "Michael", contactTitle: "CEO" });
 ok("subject names the company", withName.subject.includes("Inspiren"));
@@ -205,7 +231,120 @@ findEmail({
   });
 }).then((r) => {
   check("survives a dead network", [r.email, r.confidence], [null, null]);
+  runSyncSuites();
+});
+
+function runSyncSuites() {
+
+// ---------------------------------------------------------------------------
+
+const { buildRawMessage, textToHtml, encodeHeader } = require("./gmailDraft");
+
+function decodeRaw(raw) {
+  return Buffer.from(raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+}
+
+function partBodies(mime) {
+  // Return each base64 part decoded, so tests assert on real content.
+  return mime
+    .split(/\r\n--[^\r\n-]+\r\n/)
+    .slice(1)
+    .map((part) => {
+      const split = part.indexOf("\r\n\r\n");
+      if (split === -1) return "";
+      const payload = part.slice(split + 4).split(/\r\n--/)[0].replace(/\r\n/g, "");
+      return Buffer.from(payload, "base64").toString("utf8");
+    });
+}
+
+console.log("\nencodeHeader");
+check("leaves ascii alone", encodeHeader("Congratulations on Sequen's Series B"), "Congratulations on Sequen's Series B");
+ok("encodes non-ascii as an RFC 2047 word", /^=\?UTF-8\?B\?/.test(encodeHeader("Zoë Weil")));
+
+console.log("\nbuildRawMessage");
+const withTo = decodeRaw(
+  buildRawMessage({
+    from: "Jesse Strauss <jesse@yfgc.ai>",
+    to: "alex@inspiren.com",
+    subject: "Congratulations on Inspiren's Series C",
+    text: "Dear Alex,\n\nHave a look at yfgc.ai and see what we are about.",
+    html: textToHtml("Dear Alex,\n\nHave a look at yfgc.ai and see what we are about.", "yfgc.ai"),
+  })
+);
+ok("sets From to the yfgc.ai identity", withTo.includes("From: Jesse Strauss <jesse@yfgc.ai>"));
+ok("sets To when an address was found", withTo.includes("To: alex@inspiren.com"));
+ok("is multipart/alternative", /Content-Type: multipart\/alternative; boundary="yfgc_/.test(withTo));
+ok("declares utf-8 on both parts", (withTo.match(/charset="UTF-8"/g) || []).length === 2);
+ok("uses CRLF line endings", withTo.includes("\r\n") && !/[^\r]\n/.test(withTo));
+
+const bodies = partBodies(withTo);
+check("carries two alternative parts", bodies.length, 2);
+ok("plain part is the plain text", bodies[0].startsWith("Dear Alex,"));
+ok("html part is html", bodies[1].startsWith("<div>"));
+ok("html links the site", bodies[1].includes('<a href="https://yfgc.ai">yfgc.ai</a>'));
+
+const noTo = decodeRaw(
+  buildRawMessage({
+    from: "Jesse Strauss <jesse@yfgc.ai>",
+    subject: "Congratulations on Type's pre-seed",
+    text: "Hello,",
+    html: "<div>Hello,</div>",
+  })
+);
+// An empty "To:" header is worse than none: some clients render it as a
+// recipient and it can trip spam heuristics.
+ok("omits the To header entirely when there is no address", !/^To:/m.test(noTo));
+
+const accented = decodeRaw(
+  buildRawMessage({
+    from: "Jesse Strauss <jesse@yfgc.ai>",
+    subject: "Congratulations on Sequen's Series B",
+    text: "Dear Zoë,\n\nYour Fractional General Counsel™ is here.",
+    html: "<div>Dear Zoë,</div>",
+  })
+);
+const accentedBodies = partBodies(accented);
+ok("round-trips a diaeresis", accentedBodies[0].includes("Zoë"));
+ok("round-trips the trademark sign", accentedBodies[0].includes("™"));
+ok("wraps base64 at 76 columns", accented.split("\r\n").every((l) => l.length <= 78));
+
+console.log("\ntextToHtml");
+ok("escapes angle brackets", textToHtml("a < b & c", "").includes("a &lt; b &amp; c"));
+ok("turns newlines into breaks", textToHtml("one\ntwo", "").includes("one<br>two"));
+ok("leaves the text alone when no site is given", !textToHtml("visit yfgc.ai", "").includes("<a "));
+
+console.log("\nbuildSummary");
+const { buildSummary } = require("./summary");
+const summary = buildSummary({
+  digests: [],
+  drafted: [
+    {
+      row: { company: "Inspiren", amountText: "$70 million", round: "Series C" },
+      contact: {
+        fullName: "Alex Hejnosz", title: "CEO", isCeo: true, email: "alex@inspiren.com",
+        emailConfidence: "verified", otherLeaders: [], notes: "", sources: ["https://x"], errors: [],
+      },
+      draftId: "r1",
+    },
+    {
+      row: { company: "Type", amountText: "$4 million", round: "pre-seed" },
+      contact: {
+        fullName: null, title: null, isCeo: false, email: null, emailConfidence: null,
+        otherLeaders: [], notes: "Founders not named in any source found.", sources: [], errors: [],
+      },
+      draftId: "r2",
+    },
+  ],
+  skipped: [{ company: "Sequen", reason: "already drafted or sent" }],
+  failed: [],
+});
+ok("separates ready from needs-an-address", summary.indexOf("READY TO SEND") < summary.indexOf("NEEDS AN ADDRESS"));
+ok("shows the verified address", summary.includes("alex@inspiren.com (verified)"));
+ok("flags the empty To: line", summary.includes("no address found"));
+ok("lists skips with a reason", summary.includes("Sequen: already drafted or sent"));
+ok("states nothing was sent", summary.includes("Nothing has been sent."));
+ok("no em dash in the summary", !summary.includes("—"));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
-});
+}

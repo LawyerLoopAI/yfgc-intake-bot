@@ -16,7 +16,10 @@
 // Not every issue has the section (Friday round-ups usually skip it), so an
 // empty array is a normal result, not an error.
 
-const SECTION_MARKER = /\[New York Funding\]/i;
+// The plain-text digest marks the section with the image alt text. If a future
+// issue arrives without a text/plain part, gmail/parser.js falls back to
+// stripped HTML, which drops the alt text, so a bare heading line counts too.
+const SECTION_MARKER = /\[New York Funding\]|^\s*\**\s*New York Funding\s*\**\s*$/i;
 const RULE = /^-{5,}$/;
 const NEXT_SECTION = /^View image:.*\[[^\]]+\]\s*$/;
 const BULLET = /^\*\s+(.*)$/;
@@ -134,13 +137,57 @@ function normalizeRound(raw) {
   return r.toLowerCase();
 }
 
+// A funding item always opens with a markdown link and states a raise. Prose
+// bullets elsewhere in the digest mention funded companies but do not take
+// this shape, so it is specific enough to use when the section header is gone.
+const FUNDING_SHAPE = /^\[[^\]]+\]\([^)\s]+\)[\s\S]*\braised\s+\$/i;
+
+/**
+ * Every `* ` bullet in the document, wrapped lines folded, regardless of
+ * section. Used only as a fallback.
+ * @param {string} body
+ * @returns {string[]}
+ */
+function allBullets(body) {
+  const bullets = [];
+  let current = null;
+  for (const line of String(body || "").split(/\r?\n/)) {
+    const m = line.match(BULLET);
+    if (m) {
+      if (current) bullets.push(current);
+      current = m[1].trim();
+      continue;
+    }
+    if (NESTED_BULLET.test(line)) continue;
+    if (current && line.trim()) current += " " + line.trim();
+    else if (current && !line.trim()) {
+      bullets.push(current);
+      current = null;
+    }
+  }
+  if (current) bullets.push(current);
+  return bullets;
+}
+
 /**
  * Parse a whole digest body into funding records.
+ *
+ * Normally this reads the New York Funding section. When that header is
+ * missing, rather than reporting an empty day it falls back to any bullet
+ * shaped like a funding item anywhere in the document. A missed company is a
+ * missed client; a stray one costs Jesse ten seconds deleting a draft.
+ *
  * @param {string} body plain-text email body
  * @returns {object[]}
  */
 function parseFundingSection(body) {
-  return extractFundingBullets(body).map(parseBullet).filter(Boolean);
+  const inSection = extractFundingBullets(body).map(parseBullet).filter(Boolean);
+  if (inSection.length) return inSection;
+
+  return allBullets(body)
+    .filter((b) => FUNDING_SHAPE.test(b))
+    .map(parseBullet)
+    .filter(Boolean);
 }
 
-module.exports = { parseFundingSection, extractFundingBullets, parseBullet };
+module.exports = { parseFundingSection, extractFundingBullets, parseBullet, allBullets };

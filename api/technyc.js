@@ -1,0 +1,175 @@
+require("dotenv").config();
+
+const { google } = require("googleapis");
+const { getAuthClient } = require("../gmail/auth");
+const { parseMessage } = require("../gmail/parser");
+const { parseFundingSection } = require("../technyc/parseFunding");
+const { buildOutreachEmail, SITE } = require("../technyc/emailTemplate");
+const { researchContact } = require("../technyc/research");
+const { createDraft, textToHtml } = require("../technyc/gmailDraft");
+const { buildSummary } = require("../technyc/summary");
+
+const SOURCE_LABEL_ID = "Label_2387005531655631291"; // "TechNYC Emails"
+const FROM = "Jesse Strauss <jesse@yfgc.ai>";
+const SUMMARY_TO = "jesse@strausslawpllc.com";
+const LOOKBACK = "7d";
+
+function isAuthorized(req) {
+  const expected = process.env.CRON_SECRET;
+  const header =
+    (req.headers && (req.headers.authorization || req.headers.Authorization)) || "";
+  if (!expected || !header) return false;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return !!match && match[1].trim() === expected;
+}
+
+async function search(gmail, q, limit = 25) {
+  const res = await gmail.users.messages.list({ userId: "me", q, maxResults: limit });
+  return res.data.messages || [];
+}
+
+/**
+ * Has this company already been written to?
+ *
+ * The Gmail account's drafts and sent mail are the pipeline's only state.
+ * There is no processed-marker label because the connector that also runs this
+ * workflow has no label-write scope, and a local file would not survive
+ * Vercel's read-only, ephemeral filesystem. The work product is durable and
+ * lives exactly where a duplicate would do damage.
+ */
+async function alreadyCovered(gmail, company) {
+  const q = `subject:"Congratulations on ${company}'s" (in:draft OR in:sent OR in:anywhere)`;
+  const hits = await search(gmail, q, 1);
+  return hits.length > 0;
+}
+
+async function summaryAlreadySent(gmail, digestSubject) {
+  const date = digestSubject.replace(/^Tech:NYC Digest:\s*/i, "").trim();
+  if (!date) return false;
+  const hits = await search(gmail, `in:sent subject:"TechNYC outreach" "(${date})"`, 1);
+  return hits.length > 0;
+}
+
+async function sendSummary(authClient, subject, body) {
+  const gmail = google.gmail({ version: "v1", auth: authClient });
+  const raw = Buffer.from(
+    [
+      `From: ${FROM}`,
+      `To: ${SUMMARY_TO}`,
+      `Subject: ${subject}`,
+      "MIME-Version: 1.0",
+      'Content-Type: text/plain; charset="UTF-8"',
+      "Content-Transfer-Encoding: base64",
+      "",
+      Buffer.from(body, "utf8").toString("base64"),
+    ].join("\r\n"),
+    "utf8"
+  )
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+}
+
+async function runPipeline() {
+  const authClient = await getAuthClient();
+  const gmail = google.gmail({ version: "v1", auth: authClient });
+
+  const messages = await search(gmail, `label:${SOURCE_LABEL_ID} newer_than:${LOOKBACK}`, 25);
+  const seenSubjects = new Set();
+  const outcome = { digests: [], drafted: [], skipped: [], failed: [] };
+
+  for (const { id } of messages) {
+    let digest;
+    try {
+      digest = await parseMessage(authClient, id);
+    } catch (err) {
+      outcome.failed.push({ messageId: id, error: err.message });
+      continue;
+    }
+
+    // Jesse receives each digest at two addresses, so one edition arrives
+    // twice. Work each subject once.
+    if (seenSubjects.has(digest.subject)) continue;
+    seenSubjects.add(digest.subject);
+
+    if (await summaryAlreadySent(gmail, digest.subject)) {
+      outcome.skipped.push({ digest: digest.subject, reason: "summary already sent" });
+      continue;
+    }
+
+    const rows = parseFundingSection(digest.body);
+    outcome.digests.push({ subject: digest.subject, companies: rows.length });
+    if (!rows.length) continue;
+
+    for (const row of rows) {
+      try {
+        if (await alreadyCovered(gmail, row.company)) {
+          outcome.skipped.push({ company: row.company, reason: "already drafted or sent" });
+          continue;
+        }
+
+        const contact = await researchContact(row);
+        const email = buildOutreachEmail({ ...row, contactFirstName: contact.firstName });
+
+        const draft = await createDraft(authClient, {
+          from: FROM,
+          to: contact.email || undefined,
+          subject: email.subject,
+          text: email.body,
+          html: textToHtml(email.body, SITE),
+        });
+
+        outcome.drafted.push({ row, contact, draftId: draft.id });
+      } catch (err) {
+        outcome.failed.push({ company: row.company, error: err.message });
+      }
+    }
+  }
+
+  return { outcome, authClient };
+}
+
+module.exports = async (req, res) => {
+  const method = (req && req.method) || "GET";
+  const reply = (status, payload) => {
+    if (res && typeof res.status === "function") return res.status(status).json(payload);
+    return payload;
+  };
+
+  if (method !== "POST" && method !== "GET") {
+    return reply(405, { ok: false, error: "Method not allowed" });
+  }
+  if (!isAuthorized(req)) {
+    console.error("technyc: unauthorized invocation rejected");
+    return reply(401, { ok: false, error: "Unauthorized" });
+  }
+
+  try {
+    console.log("technyc: start");
+    const { outcome, authClient } = await runPipeline();
+
+    // A quiet day is not worth an email, but a day with failures is, even when
+    // nothing got drafted: silence would look identical to "no digest today".
+    if (outcome.drafted.length || outcome.failed.length) {
+      const date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" });
+      await sendSummary(
+        authClient,
+        `TechNYC outreach: ${outcome.drafted.length} draft${
+          outcome.drafted.length === 1 ? "" : "s"
+        } ready (${date})`,
+        buildSummary(outcome)
+      );
+    }
+
+    console.log(
+      `technyc: done. drafted=${outcome.drafted.length} skipped=${outcome.skipped.length} failed=${outcome.failed.length}`
+    );
+    return reply(200, { ok: true, outcome });
+  } catch (err) {
+    console.error("technyc: crashed:", err.message);
+    return reply(500, { ok: false, error: err.message });
+  }
+};
