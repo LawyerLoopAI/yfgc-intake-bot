@@ -4,7 +4,7 @@
 // dotenv, which means the tests can assert on the exact wording without the
 // deployment's packages installed.
 
-function describe(row, contact, draftId) {
+function describe(row, contact, draftId, completed) {
   const bits = [`${row.company}, ${[row.amountText, row.round].filter(Boolean).join(" ") || "amount not stated"}`];
   if (contact.fullName) {
     bits.push(`  ${contact.fullName}${contact.title ? ", " + contact.title : ""}${contact.isCeo ? "" : " (no CEO found, this is the founder)"}`);
@@ -26,7 +26,9 @@ function describe(row, contact, draftId) {
   if (contact.errors && contact.errors.length) {
     bits.push(`  problems: ${contact.errors.join("; ")}`);
   }
-  if (draftId) bits.push(`  draft ${draftId}`);
+  if (draftId) {
+    bits.push(`  draft ${draftId}${completed ? " (filled in an earlier draft that had no address)" : ""}`);
+  }
   return bits.join("\n");
 }
 
@@ -41,12 +43,12 @@ function buildSummary(outcome) {
 
   if (ready.length) {
     lines.push("READY TO SEND", "");
-    for (const d of ready) lines.push(describe(d.row, d.contact, d.draftId), "");
+    for (const d of ready) lines.push(describe(d.row, d.contact, d.draftId, d.completed), "");
   }
 
   if (needsAddress.length) {
     lines.push("NEEDS AN ADDRESS", "");
-    for (const d of needsAddress) lines.push(describe(d.row, d.contact, d.draftId), "");
+    for (const d of needsAddress) lines.push(describe(d.row, d.contact, d.draftId, d.completed), "");
   }
 
   if (outcome.skipped.length) {

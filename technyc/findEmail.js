@@ -170,9 +170,20 @@ function inferShape(addresses) {
  *   controls timeouts and user agent.
  * @param {string[]} [opts.extraPages]  additional URLs worth reading, such as
  *   the funding press release, which usually ends in a media contact block
+ * @param {number} [opts.pageTimeoutMs]  per-request timeout, default 8000. One
+ *   unresponsive host must not consume the caller's whole time budget.
+ * @param {number} [opts.deadline]  Date.now() value past which no further
+ *   pages are fetched
  * @returns {Promise<{email: string|null, confidence: string|null, evidence: string[], notes: string[]}>}
  */
-async function findEmail({ website, personName, fetchImpl, extraPages = [] }) {
+async function findEmail({
+  website,
+  personName,
+  fetchImpl,
+  extraPages = [],
+  pageTimeoutMs = 8000,
+  deadline = null,
+}) {
   const domain = siteDomain(website);
   const parts = nameParts(personName);
   const notes = [];
@@ -188,9 +199,19 @@ async function findEmail({ website, personName, fetchImpl, extraPages = [] }) {
 
   const collected = new Set();
   for (const url of urls) {
+    if (deadline && Date.now() > deadline) {
+      notes.push("stopped sweeping early, out of time");
+      break;
+    }
     let html;
     try {
-      const res = await fetchImpl(url);
+      // AbortSignal.timeout is Node 18+; fall back to no signal so an injected
+      // test fetch, or an older runtime, still works.
+      const signal =
+        typeof AbortSignal !== "undefined" && AbortSignal.timeout
+          ? AbortSignal.timeout(pageTimeoutMs)
+          : undefined;
+      const res = await fetchImpl(url, signal ? { signal } : undefined);
       if (!res || !res.ok) continue;
       html = await res.text();
     } catch {

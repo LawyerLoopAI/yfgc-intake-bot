@@ -358,6 +358,22 @@ ok("separates ready from needs-an-address", summary.indexOf("READY TO SEND") < s
 ok("shows the verified address", summary.includes("alex@inspiren.com (verified)"));
 ok("flags the empty To: line", summary.includes("no address found"));
 ok("lists skips with a reason", summary.includes("Sequen: already drafted or sent"));
+
+// A run that finishes an earlier addressless draft should say so, otherwise
+// Jesse cannot tell a newly filled-in draft from one he already reviewed.
+const completedSummary = buildSummary({
+  digests: [], skipped: [], failed: [],
+  drafted: [{
+    row: { company: "Sequen", amountText: "$90 million", round: "Series B" },
+    contact: {
+      fullName: "Zoe Weil", title: "CEO", isCeo: true, email: "zoe@sequen.ai",
+      emailConfidence: "verified", otherLeaders: [], notes: "", sources: [], errors: [],
+    },
+    draftId: "r9", completed: true,
+  }],
+});
+ok("flags a draft that was filled in later", completedSummary.includes("filled in an earlier draft that had no address"));
+ok("says nothing about filling in for a fresh draft", !summary.includes("filled in an earlier draft"));
 ok("states nothing was sent", summary.includes("Nothing has been sent."));
 ok("no em dash in the summary", !summary.includes("—"));
 

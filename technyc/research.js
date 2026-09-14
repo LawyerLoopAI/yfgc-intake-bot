@@ -76,6 +76,7 @@ function collectText(content) {
  * @returns {Promise<object>} contact details, always an object, never a throw
  */
 async function researchContact(funding, deps = {}) {
+  const deadline = deps.deadline || null;
   // Required lazily, like googleapis in gmailDraft.js, so the pure helpers
   // here stay importable without the SDK installed.
   const client = deps.client || new (require("@anthropic-ai/sdk"))();
@@ -145,6 +146,7 @@ async function researchContact(funding, deps = {}) {
         website,
         personName: result.fullName,
         fetchImpl,
+        deadline,
       });
       const beatsCurrent =
         sweep.email &&

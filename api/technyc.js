@@ -4,15 +4,21 @@ const { google } = require("googleapis");
 const { getAuthClient } = require("../gmail/auth");
 const { parseMessage } = require("../gmail/parser");
 const { parseFundingSection } = require("../technyc/parseFunding");
-const { buildOutreachEmail, SITE } = require("../technyc/emailTemplate");
+const { buildOutreachEmail, LINKS } = require("../technyc/emailTemplate");
 const { researchContact } = require("../technyc/research");
-const { createDraft, textToHtml } = require("../technyc/gmailDraft");
+const { createDraft, updateDraft, textToHtml } = require("../technyc/gmailDraft");
 const { buildSummary } = require("../technyc/summary");
 
 const SOURCE_LABEL_ID = "Label_2387005531655631291"; // "TechNYC Emails"
 const FROM = "Jesse Strauss <jesse@yfgc.ai>";
 const SUMMARY_TO = "jesse@yfgc.ai";
 const LOOKBACK = "7d";
+
+// Vercel kills the function at maxDuration (set in vercel.json). Stop starting
+// new companies before that so the run finishes cleanly and sends its summary
+// rather than being cut off mid-draft. Whatever is left is picked up by the
+// next run, which is safe because the work product is the state.
+const TIME_BUDGET_MS = 240000;
 
 function isAuthorized(req) {
   const expected = process.env.CRON_SECRET;
@@ -29,18 +35,40 @@ async function search(gmail, q, limit = 25) {
 }
 
 /**
- * Has this company already been written to?
+ * What, if anything, already exists for this company?
  *
  * The Gmail account's drafts and sent mail are the pipeline's only state.
  * There is no processed-marker label because the connector that also runs this
  * workflow has no label-write scope, and a local file would not survive
  * Vercel's read-only, ephemeral filesystem. The work product is durable and
  * lives exactly where a duplicate would do damage.
+ *
+ * The distinction that matters: a draft with no recipient is unfinished work,
+ * not evidence the company was contacted. A previous run that could not find
+ * an address should not lock the company out forever, so those drafts are
+ * completed in place on a later run rather than skipped or duplicated.
+ *
+ * @returns {Promise<{state: "sent"|"drafted"|"addressless"|"none", draftId?: string}>}
  */
-async function alreadyCovered(gmail, company) {
-  const q = `subject:"Congratulations on ${company}'s" (in:draft OR in:sent OR in:anywhere)`;
-  const hits = await search(gmail, q, 1);
-  return hits.length > 0;
+async function existingWork(gmail, company) {
+  const subject = `subject:"Congratulations on ${company}'s"`;
+
+  const sent = await search(gmail, `${subject} in:sent`, 1);
+  if (sent.length) return { state: "sent" };
+
+  const res = await gmail.users.drafts.list({ userId: "me", q: subject, maxResults: 5 });
+  const drafts = res.data.drafts || [];
+  if (!drafts.length) return { state: "none" };
+
+  for (const d of drafts) {
+    const full = await gmail.users.drafts.get({ userId: "me", id: d.id, format: "metadata" });
+    const headers = (full.data.message && full.data.message.payload && full.data.message.payload.headers) || [];
+    const to = headers.find((h) => h.name && h.name.toLowerCase() === "to");
+    if (to && to.value && to.value.trim()) return { state: "drafted" };
+  }
+
+  // Every matching draft lacks a recipient. Take the first and finish it.
+  return { state: "addressless", draftId: drafts[0].id };
 }
 
 async function summaryAlreadySent(gmail, digestSubject) {
@@ -74,6 +102,7 @@ async function sendSummary(authClient, subject, body) {
 }
 
 async function runPipeline() {
+  const deadline = Date.now() + TIME_BUDGET_MS;
   const authClient = await getAuthClient();
   const gmail = google.gmail({ version: "v1", auth: authClient });
 
@@ -105,24 +134,38 @@ async function runPipeline() {
     if (!rows.length) continue;
 
     for (const row of rows) {
+      if (Date.now() > deadline) {
+        outcome.skipped.push({ company: row.company, reason: "out of time this run, will retry on the next one" });
+        continue;
+      }
+
       try {
-        if (await alreadyCovered(gmail, row.company)) {
-          outcome.skipped.push({ company: row.company, reason: "already drafted or sent" });
+        const prior = await existingWork(gmail, row.company);
+        if (prior.state === "sent" || prior.state === "drafted") {
+          outcome.skipped.push({ company: row.company, reason: `already ${prior.state}` });
           continue;
         }
 
-        const contact = await researchContact(row);
+        const contact = await researchContact(row, { deadline });
         const email = buildOutreachEmail({ ...row, contactFirstName: contact.firstName });
-
-        const draft = await createDraft(authClient, {
+        const payload = {
           from: FROM,
           to: contact.email || undefined,
           subject: email.subject,
           text: email.body,
-          html: textToHtml(email.body, SITE),
-        });
+          html: textToHtml(email.body, LINKS),
+        };
 
-        outcome.drafted.push({ row, contact, draftId: draft.id });
+        const draft = prior.state === "addressless"
+          ? await updateDraft(authClient, prior.draftId, payload)
+          : await createDraft(authClient, payload);
+
+        outcome.drafted.push({
+          row,
+          contact,
+          draftId: draft.id,
+          completed: prior.state === "addressless",
+        });
       } catch (err) {
         outcome.failed.push({ company: row.company, error: err.message });
       }

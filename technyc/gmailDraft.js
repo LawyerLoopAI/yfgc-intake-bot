@@ -170,4 +170,22 @@ async function createDraft(authClient, opts) {
   };
 }
 
-module.exports = { buildRawMessage, textToHtml, encodeHeader, createDraft };
+/**
+ * Replace an existing draft's content, keeping the same draft id.
+ * Used to fill in a draft that a previous run left without a recipient.
+ * @param {object} authClient google OAuth2 client
+ * @param {string} draftId
+ * @param {object} opts same shape as buildRawMessage
+ */
+async function updateDraft(authClient, draftId, opts) {
+  const { google } = require("googleapis");
+  const gmail = google.gmail({ version: "v1", auth: authClient });
+  const res = await gmail.users.drafts.update({
+    userId: "me",
+    id: draftId,
+    requestBody: { message: { raw: buildRawMessage(opts) } },
+  });
+  return { id: res.data.id, messageId: res.data.message && res.data.message.id };
+}
+
+module.exports = { buildRawMessage, textToHtml, encodeHeader, createDraft, updateDraft };
