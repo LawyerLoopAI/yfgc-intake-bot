@@ -3,6 +3,15 @@
     {
       "path": "/api/process",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/technyc",
+      "schedule": "0 12 * * 1-6"
     }
-  ]
+  ],
+  "functions": {
+    "api/technyc.js": {
+      "maxDuration": 300
+    }
+  }
 }

@@ -1,0 +1,31 @@
+--------------------
+View image: (https://media.beehiiv.com/x/today_in_tech_1600x300.png?t=1) [Today in Tech]
+Caption:
+
+**August's Series A Class Spreads the Wealth**
+
+* [NotAFundingItem](https://example.com/), this bullet is in the wrong section and must be ignored.
+
+--------------------
+View image: (https://media.beehiiv.com/x/new_york_funding_1600x300_1.png?t=2) [New York Funding]
+Caption:
+
+* [Cymphony](https://www.cymphony.io/), an NYC-based enterprise security company, raised $30 million in funding. Sequoia Capital and Fin Atlas Beyond Fund led the round.
+
+* [Inspiren](https://www.inspiren.com/), an NYC-based provider of AI-powered monitoring technology for senior living facilities, raised $70 million in Series C funding. NewView Capital led the round and was joined by Insight Partners, Primary Venture Partners, Scale Venture Partners, and others.
+
+* [Luminary](https://withluminary.com/), an NYC-based AI platform for wealth transfer and estate planning, raised $22 million in Series A funding.
+
+* [Sequen](https://www.sequen.ai/), an NYC-based real-time ranking and relevance
+  platform, raised $90 million in Series B funding at a $1.44 billion valuation.
+  Prysm Capital led the round, joined by Star Capital and Threshold Ventures.
+
+  * This nested bullet is commentary and must not become its own company.
+
+* [Type](https://type.ai/), an NYC-based collaborative workspace for AI tools, raised $4 million in pre-seed funding from Lerer Hippeau, Haystack, Matchstick, and others.
+
+--------------------
+View image: (https://media.beehiiv.com/x/attend_1600x300.png?t=3) [Attend]
+Caption:
+
+* September 11: Build with YOU: The Live Web Agent Hackathon. [Register here](https://luma.com/x).
