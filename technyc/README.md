@@ -299,15 +299,19 @@ research step classifies each company into one of the sectors in `research.js`.
 
 `DEFAULT_EXPERIENCE` covers every sector with no entry of its own, so each email
 carries exactly one experience sentence and there is never a hole in the copy.
-Filled today: proptech, media, consumer, enterprise-saas, fintech, crypto and
-blockchain (those two share one line). The rest fall back to the default.
+Filled today: crypto and blockchain (sharing one line), proptech, media,
+consumer, enterprise-saas, fintech, legaltech and ai-infrastructure. The rest
+fall back to the default.
 
 The classifier is told to send anything touching crypto, digital assets,
 tokens, stablecoins or blockchain infrastructure to `crypto`, even where it
 would otherwise read as fintech or infrastructure.
 
-**Every line is drawn from Jesse's resume, and the source is named in a comment
-beside it.** That is the standard: nothing may be inferred, rounded up, or
+**Every line is drawn from Jesse's resumes, and the source is quoted in a
+comment beside it.** The Drive folder holds 31 files; the useful distinct
+versions are the web3, media, litigation, real estate, venture, 3-25 and YFGC
+resumes. Where they disagree the conservative figure is used, which is why
+Common Living headcount reads 250 and not the 300 in the newer versions. That is the standard: nothing may be inferred, rounded up, or
 invented. An overstated claim about his background would be a materially
 misleading communication under Rule 7.1, and unlike a wrong email address it
 would go out under his name reading entirely plausibly. The tests check the

@@ -77,80 +77,102 @@ const PITCH =
 // One sentence of Jesse's relevant experience, keyed by the sector the
 // research step assigns, inserted after the practice-area paragraph.
 //
-// EVERY LINE BELOW IS DRAWN FROM HIS OWN RESUME, and the source is named in a
+// EVERY LINE BELOW IS DRAWN FROM HIS OWN RESUMES, and the source is quoted in a
 // comment above it. That is the standard: nothing here may be inferred,
 // rounded up, or invented. An overstated claim about his background would be a
 // materially misleading communication under Rule 7.1, and unlike a wrong email
 // address it goes out under his name reading entirely plausibly.
 //
-// Source: Jesse Strauss Resume 3-25.docx and YFGC Resume, in the Drive resumes
-// folder, read 2026-09-14.
+// Sources: the 31 files in the Drive resumes folder, read 2026-09-15. The
+// useful distinct versions are the web3 (9-24), media (5-25), litigation
+// (3-26 v4 and 5-23 v3), real estate (10-23), venture (11-23), 3-25 and YFGC
+// resumes. Where they disagree, the conservative figure is used: headcount at
+// Common Living is 250 here, because the 3-25 and YFGC resumes say 250 while
+// the web3 and media resumes say 300.
 
 // True of every recipient, so it carries any sector with no specific line.
-// Source: Common Living (Series D proptech, VP and GC 2016 to 2022, 25 to 250
-// employees across 10 states, $130M+ financings and an acquisition) and
-// Everyrealm (GC 2022 to 2023).
+// Source: Common Living, "$40M Series C, $50M Series D, $25M bridge financing,
+// and $15M venture debt facility", "25 to 250 employees across 10 states",
+// "acquired in December 2022"; Everyrealm, General Counsel 2022 to 2023.
 const DEFAULT_EXPERIENCE =
-  "Before this I was in-house general counsel at two venture-backed companies, including one I helped take from " +
-  "25 to 250 people through $130 million of financings and an acquisition.";
+  "Before this I was in-house general counsel at two venture-backed companies, including one I took from 25 to " +
+  "250 people across ten states through a Series C, a Series D, and an acquisition.";
 
-// Shared by the crypto and blockchain keys. See the comment beside them.
+// Shared by the crypto and blockchain keys, so anything crypto picks it up.
+// Source (web3 resume): Everyrealm was "a Series A blockchain startup"; he led
+// "regulatory compliance ... securities (specifically regulation A filings for
+// security tokens)" and advised on "tokenomics, global securities regulations"
+// for "all crypto, blockchain and immersive media projects"; Strauss Law today
+// is "fractional general counsel to proptech companies, developers, AI
+// startups, crypto projects".
 const CRYPTO_EXPERIENCE =
-  "I was General Counsel at Everyrealm, structuring joint ventures for immersive media and virtual experiences, " +
-  "and before that I litigated securities cases and briefed complex federal securities law at Labaton Sucharow.";
+  "I was General Counsel at Everyrealm, a Series A blockchain company, where I handled token regulation and " +
+  "Regulation A filings for security tokens, and crypto projects are part of my practice today.";
 
 const SECTOR_EXPERIENCE = {
-  // Source: Common Living, "Led a legal team at a Series D proptech startup,
-  // reporting to the CEO", plus Blank Rome commercial real estate practice.
-  "proptech":
-    "I was VP and General Counsel at Common Living, a Series D proptech company, through its growth from 25 to " +
-    "250 people across ten states and its acquisition.",
-
-  // Source: Everyrealm, "joint ventures and other agreements for immersive
-  // media and virtual experiences".
-  "media":
-    "I was General Counsel at Everyrealm, where I structured and closed joint ventures for immersive media and " +
-    "virtual experiences.",
-
-  // Source: Common Living, growth to 250 employees across ten states and
-  // "high stakes litigation with local regulators regarding the legality of
-  // the business which was resolved by consent decree".
-  "consumer":
-    "I was VP and General Counsel at Common Living as it grew to 250 people across ten states, including high " +
-    "stakes litigation with regulators over whether the business was legal at all.",
-
-  // Source: TechGC founding member; in-house GC at Everyrealm and Common
-  // Living, both venture-backed technology companies.
-  "enterprise-saas":
-    "I am a founding member of TechGC, the peer community for general counsel of technology companies, and I have " +
-    "been the in-house lawyer at two venture-backed startups.",
-
-  // Source: Everyrealm, "joint ventures and other agreements for immersive
-  // media and virtual experiences"; Labaton Sucharow, "Litigated securities
-  // fraud cases" and "legal memorandum and briefs related to complex areas of
-  // federal securities law and regulations".
-  //
-  // Note what this line does NOT say. Neither resume uses the words crypto,
-  // blockchain, web3, token or digital asset, so it claims none of them. It
-  // states the two things on the resume that a crypto founder actually cares
-  // about: a securities lawyer, and a GC who has papered deals in virtual
-  // goods. Do not upgrade this to a crypto credential without one on the
-  // resume. Both keys share the line so anything crypto picks it up.
   "crypto": CRYPTO_EXPERIENCE,
   "blockchain": CRYPTO_EXPERIENCE,
 
-  // Source: Labaton Sucharow, "Litigated securities fraud cases on behalf of
-  // institutional investors"; Common Living, "$130M+ in financings".
-  "fintech":
-    "I litigated federal securities cases for institutional investors at Labaton Sucharow, and later ran legal for " +
-    "$130 million of financings in-house.",
+  // Source: Common Living, "venture backed B2B and B2C proptech start-up that
+  // raised $125M", "over 190 bespoke B2B SaaS-type agreements with
+  // institutional real estate developers for the finance and operation of
+  // 7,500+ units", "joint ventures and general partnerships ... valued at over
+  // $100M".
+  "proptech":
+    "I was VP and General Counsel at Common Living, a venture-backed proptech company, where I papered over 190 " +
+    "agreements with institutional real estate developers covering 7,500 units and joint ventures worth more " +
+    "than $100 million.",
 
-  // Deliberately empty. The resume does not support a specific claim in these
+  // Source (media resume): Everyrealm was "an immersive media, video games, and
+  // other digital content" company; he "negotiated and successfully closed over
+  // 50 key agreements with talent and IP holders" and oversaw "the company's
+  // intellectual property strategy".
+  "media":
+    "I was General Counsel at Everyrealm, an immersive media and games company, where I closed over 50 agreements " +
+    "with talent and IP holders and ran the intellectual property portfolio.",
+
+  // Source: Common Living, "B2B and B2C proptech start-up", growth "to 250
+  // employees operating in ten states", "high stakes litigation with local
+  // regulators regarding the legality of the business which was resolved by
+  // consent decree", and privacy compliance "(GDPR and CCPA)".
+  "consumer":
+    "I was VP and General Counsel at Common Living as it grew to 250 people across ten states, running its privacy " +
+    "compliance and its litigation with regulators over whether the business was legal at all.",
+
+  // Source: Common Living, "over 190 bespoke B2B SaaS-type agreements" and
+  // "technology licensing"; TechGC founding member since 2017.
+  "enterprise-saas":
+    "I drafted and negotiated more than 190 bespoke B2B SaaS agreements as general counsel at Common Living, and I " +
+    "am a founding member of TechGC, the peer community for general counsel of technology companies.",
+
+  // Source: Indepayment.com LLC, founder, "an internet-native debt collection
+  // platform allowing users to register and sell receivables"; Everyrealm,
+  // compliance for "payments" and "global securities regulations"; Labaton
+  // Sucharow, "Litigated securities fraud cases on behalf of institutional
+  // investors".
+  "fintech":
+    "I founded an internet-native receivables platform, led payments and securities compliance in-house at " +
+    "Everyrealm, and litigated federal securities cases at Labaton Sucharow.",
+
+  // Source (media resume, LawyerLoop entry): "LAWYERLOOP AI, Founder, 2024.
+  // Beta artificial intelligence platform for lawyers to connect with clients."
+  // Plus in-house GC at Everyrealm and Common Living.
+  "legaltech":
+    "I founded LawyerLoop, an AI platform connecting lawyers with clients, so I have built in this space as well as " +
+    "lawyered in it, after six years as general counsel of a venture-backed startup.",
+
+  // Source (web3 resume): Strauss Law is "fractional general counsel to
+  // proptech companies, developers, AI startups, crypto projects"; Everyrealm,
+  // "actionable advice to cross-functional teams, including product,
+  // engineering, and operations".
+  "ai-infrastructure":
+    "AI startups are a core part of my fractional practice, and before that I was the in-house lawyer two " +
+    "venture-backed technology companies relied on for product, privacy, and engineering questions.",
+
+  // Deliberately empty. The resumes do not support a specific claim in these
   // sectors, so DEFAULT_EXPERIENCE carries them. Fill one in only from
-  // something actually on the resume.
+  // something actually on a resume.
   "healthtech": "",
-  "legaltech": "",
-  "ai-infrastructure": "",
   "devtools": "",
   "marketplace": "",
   "climate": "",
