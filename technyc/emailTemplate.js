@@ -34,6 +34,11 @@ const BOOKING_URL = "https://calendly.com/yfgc/30min";
 // the plain-text body rather than a bare domain.
 const BOOKING_TEXT = "https://calendly.com/yfgc/30min";
 
+// Jesse's newsletter, in the signature of every email. Named "Fractionally
+// Legal" per the resumes ("Author of 'Fractionally Legal' available at ...").
+const SUBSTACK_URL = "https://fractionallyyours.substack.com/";
+const SUBSTACK_TEXT = "https://fractionallyyours.substack.com/";
+
 // Anything in the copy that should be a real link in the HTML part. Longest
 // first, so a shorter match cannot chew through a longer one.
 const CONTACT_EMAIL = "jesse@yfgc.ai";
@@ -41,6 +46,7 @@ const LINKS = [
   { text: BOOKING_TEXT, href: BOOKING_URL },
   // Longer than SITE, so it is matched and parked first. Without it the
   // signature's address would be chopped into jesse@<a>yfgc.ai</a>.
+  { text: SUBSTACK_TEXT, href: SUBSTACK_URL },
   { text: CONTACT_EMAIL, href: `mailto:${CONTACT_EMAIL}` },
   { text: SITE, href: `https://${SITE}` },
 ];
@@ -203,6 +209,7 @@ const SIGNATURE = [
   "Strauss Law PLLC",
   "765 Amsterdam Avenue, 5E | New York, NY 10024",
   `${CONTACT_EMAIL} | 917-541-8428`,
+  `Fractionally Legal: ${SUBSTACK_TEXT}`,
 ].join("\n");
 
 // ---------------------------------------------------------------------------
@@ -268,6 +275,8 @@ module.exports = {
   CONTACT_EMAIL,
   BOOKING_URL,
   BOOKING_TEXT,
+  SUBSTACK_URL,
+  SUBSTACK_TEXT,
   SUBSTANTIATION,
   PITCH,
   OFFER,
