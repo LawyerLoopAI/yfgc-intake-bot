@@ -89,7 +89,19 @@ console.log("\nbuildOutreachEmail");
 const withName = buildOutreachEmail({ ...rows[1], contactFirstName: "Michael", contactTitle: "CEO" });
 ok("subject names the company", withName.subject.includes("Inspiren"));
 ok("greets the contact by first name", withName.body.startsWith("Dear Michael,"));
-ok("states the amount", withName.body.includes("$70 million"));
+// Jesse decided on 2026-09-15 not to quote the money back at the reader.
+ok("does not quote the amount back", !withName.body.includes("$70 million"));
+// Scoped to the congratulations sentence. The experience paragraph legitimately
+// carries its own dollar figures, such as the $100 million of joint ventures.
+const congrats = (row, extra) => buildOutreachEmail({ ...row, ...extra }).body.split("\n\n")[1];
+ok("no dollar figure in the congratulations sentence", !/\$/.test(congrats(rows[1], { contactFirstName: "Michael" })));
+ok(
+  "and none for any row the parser produces",
+  rows.every((row) => !/\$/.test(congrats(row, { contactFirstName: "Alex" })))
+);
+// rows[3] is the one the digest gave a valuation for.
+check("the valuation is there to quote", rows[3].valuationText, "$1.44 billion");
+ok("but it is not quoted", !congrats(rows[3], { contactFirstName: "Alex" }).includes("1.44"));
 ok("states the round", withName.body.includes("Series C"));
 ok("names the investors", withName.body.includes("NewView Capital"));
 ok("cites where the news came from", withName.body.includes("Tech:NYC Digest"));
@@ -144,7 +156,7 @@ ok("falls back to a neutral greeting", noName.body.startsWith("Hello,"));
 // Scoped to the congratulations sentence: the experience paragraph legitimately
 // names the rounds Jesse closed in-house.
 ok("omits the round clause when the digest gave none", !/Series/.test(noName.body.split("\n\n")[1]));
-ok("still states the amount", noName.body.includes("$30 million"));
+ok("still omits the amount", !noName.body.includes("$30 million"));
 
 const noInvestors = buildOutreachEmail({ ...rows[2], contactFirstName: "Alex" });
 ok("omits investor sentence when none were listed", !/led the round/i.test(noInvestors.body));

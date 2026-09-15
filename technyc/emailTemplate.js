@@ -223,17 +223,18 @@ function buildOutreachEmail(funding) {
   const {
     company,
     description,
-    amountText,
     round,
-    valuationText,
     investors,
     contactFirstName,
     sector,
   } = funding;
 
-  const raise = [amountText, round].filter(Boolean).join(" ");
-  const raisePhrase = raise ? (round ? raise : `${raise} raise`) : "new round";
-  const valuation = valuationText ? ` at a ${valuationText} valuation` : "";
+  // Jesse decided on 2026-09-15 not to quote the money back at the reader, so
+  // neither the amount nor the valuation appears in the body. The digest still
+  // supplies both and the tracking sheet still records the amount; they just do
+  // not go out. The round is kept, because naming it is what shows the note is
+  // about this raise and not a form letter.
+  const raisePhrase = round || "new funding";
 
   const subject = round
     ? `Congratulations on ${company}'s ${round}`
@@ -243,7 +244,7 @@ function buildOutreachEmail(funding) {
     contactFirstName ? `Dear ${contactFirstName},` : "Hello,",
 
     [
-      `Congratulations on ${company}'s ${raisePhrase}${valuation}.`,
+      `Congratulations on ${company}'s ${raisePhrase}.`,
       investors || null,
       "I saw it in the Tech:NYC Digest.",
     ]
