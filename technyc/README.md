@@ -310,9 +310,11 @@ would otherwise read as fintech or infrastructure.
 **Every line is drawn from Jesse's resumes, and the source is quoted in a
 comment beside it.** The Drive folder holds 31 files; the useful distinct
 versions are the web3, media, litigation, real estate, venture, 3-25 and YFGC
-resumes. Where they disagree the conservative figure is used, which is why
-Common Living headcount reads 250 and not the 300 in the newer versions. That is the standard: nothing may be inferred, rounded up, or
-invented. An overstated claim about his background would be a materially
+resumes. Where they disagree, ask Jesse rather than
+guessing: Common Living headcount reads 300, from the web3 and media versions,
+which he confirmed against the 250 in the older ones.
+
+That is the standard. Nothing may be inferred, rounded up, or invented. An overstated claim about his background would be a materially
 misleading communication under Rule 7.1, and unlike a wrong email address it
 would go out under his name reading entirely plausibly. The tests check the
 shape of each line (a full sentence, substantive, no em dash) and that the

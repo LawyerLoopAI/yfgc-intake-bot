@@ -86,17 +86,18 @@ const PITCH =
 // Sources: the 31 files in the Drive resumes folder, read 2026-09-15. The
 // useful distinct versions are the web3 (9-24), media (5-25), litigation
 // (3-26 v4 and 5-23 v3), real estate (10-23), venture (11-23), 3-25 and YFGC
-// resumes. Where they disagree, the conservative figure is used: headcount at
-// Common Living is 250 here, because the 3-25 and YFGC resumes say 250 while
-// the web3 and media resumes say 300.
+// resumes. Where they disagree, ask Jesse rather than guessing. Headcount at
+// Common Living is 300, per the web3 and media resumes; the 3-25 and YFGC
+// resumes say 250, and Jesse confirmed 300 is right on 2026-09-15.
 
 // True of every recipient, so it carries any sector with no specific line.
 // Source: Common Living, "$40M Series C, $50M Series D, $25M bridge financing,
-// and $15M venture debt facility", "25 to 250 employees across 10 states",
+// and $15M venture debt facility", "25 employees operating 100 units in two
+// states to 300 employees operating 3,000 units in ten states",
 // "acquired in December 2022"; Everyrealm, General Counsel 2022 to 2023.
 const DEFAULT_EXPERIENCE =
   "Before this I was in-house general counsel at two venture-backed companies, including one I took from 25 to " +
-  "250 people across ten states through a Series C, a Series D, and an acquisition.";
+  "300 people across ten states through a Series C, a Series D, and an acquisition.";
 
 // Shared by the crypto and blockchain keys, so anything crypto picks it up.
 // Source (web3 resume): Everyrealm was "a Series A blockchain startup"; he led
@@ -131,12 +132,12 @@ const SECTOR_EXPERIENCE = {
     "I was General Counsel at Everyrealm, an immersive media and games company, where I closed over 50 agreements " +
     "with talent and IP holders and ran the intellectual property portfolio.",
 
-  // Source: Common Living, "B2B and B2C proptech start-up", growth "to 250
+  // Source: Common Living, "B2B and B2C proptech start-up", growth to "300
   // employees operating in ten states", "high stakes litigation with local
   // regulators regarding the legality of the business which was resolved by
   // consent decree", and privacy compliance "(GDPR and CCPA)".
   "consumer":
-    "I was VP and General Counsel at Common Living as it grew to 250 people across ten states, running its privacy " +
+    "I was VP and General Counsel at Common Living as it grew to 300 people across ten states, running its privacy " +
     "compliance and its litigation with regulators over whether the business was legal at all.",
 
   // Source: Common Living, "over 190 bespoke B2B SaaS-type agreements" and
@@ -146,7 +147,9 @@ const SECTOR_EXPERIENCE = {
     "am a founding member of TechGC, the peer community for general counsel of technology companies.",
 
   // Source: Indepayment.com LLC, founder, "an internet-native debt collection
-  // platform allowing users to register and sell receivables"; Everyrealm,
+  // platform allowing users to register and sell receivables". Jesse confirmed
+  // on 2026-09-15 that it is a prior startup, so this stays in the past tense.
+  // Everyrealm,
   // compliance for "payments" and "global securities regulations"; Labaton
   // Sucharow, "Litigated securities fraud cases on behalf of institutional
   // investors".
