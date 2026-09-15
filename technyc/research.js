@@ -27,7 +27,8 @@ const WEB_SEARCH_TOOL = {
 const SECTORS = [
   "fintech", "healthtech", "proptech", "legaltech", "ai-infrastructure",
   "devtools", "enterprise-saas", "marketplace", "consumer", "climate",
-  "security", "biotech", "logistics", "edtech", "media", "other",
+  "security", "biotech", "logistics", "edtech", "media", "crypto",
+  "blockchain", "other",
 ];
 
 // Stage one: who is this note addressed to.
@@ -40,6 +41,10 @@ Never invent a name or a title. If you cannot establish who it is, say so.
 Also classify what the company does into exactly one of these sectors, so the
 note can reference relevant experience: ${SECTORS.join(", ")}. Use "other" only
 when nothing else genuinely fits.
+
+If the company works with crypto, digital assets, tokens, stablecoins, or
+blockchain infrastructure, classify it "crypto" even where it would otherwise
+read as fintech, payments, or infrastructure.
 
 Reply with a single JSON object and nothing else:
 {"fullName": string|null, "firstName": string|null, "title": string|null, "isCeo": boolean, "sector": string, "otherLeaders": string[], "sources": string[], "notes": string}`;

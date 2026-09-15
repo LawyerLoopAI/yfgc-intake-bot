@@ -94,6 +94,11 @@ const DEFAULT_EXPERIENCE =
   "Before this I was in-house general counsel at two venture-backed companies, including one I helped take from " +
   "25 to 250 people through $130 million of financings and an acquisition.";
 
+// Shared by the crypto and blockchain keys. See the comment beside them.
+const CRYPTO_EXPERIENCE =
+  "I was General Counsel at Everyrealm, structuring joint ventures for immersive media and virtual experiences, " +
+  "and before that I litigated securities cases and briefed complex federal securities law at Labaton Sucharow.";
+
 const SECTOR_EXPERIENCE = {
   // Source: Common Living, "Led a legal team at a Series D proptech startup,
   // reporting to the CEO", plus Blank Rome commercial real estate practice.
@@ -119,6 +124,20 @@ const SECTOR_EXPERIENCE = {
   "enterprise-saas":
     "I am a founding member of TechGC, the peer community for general counsel of technology companies, and I have " +
     "been the in-house lawyer at two venture-backed startups.",
+
+  // Source: Everyrealm, "joint ventures and other agreements for immersive
+  // media and virtual experiences"; Labaton Sucharow, "Litigated securities
+  // fraud cases" and "legal memorandum and briefs related to complex areas of
+  // federal securities law and regulations".
+  //
+  // Note what this line does NOT say. Neither resume uses the words crypto,
+  // blockchain, web3, token or digital asset, so it claims none of them. It
+  // states the two things on the resume that a crypto founder actually cares
+  // about: a securities lawyer, and a GC who has papered deals in virtual
+  // goods. Do not upgrade this to a crypto credential without one on the
+  // resume. Both keys share the line so anything crypto picks it up.
+  "crypto": CRYPTO_EXPERIENCE,
+  "blockchain": CRYPTO_EXPERIENCE,
 
   // Source: Labaton Sucharow, "Litigated securities fraud cases on behalf of
   // institutional investors"; Common Living, "$130M+ in financings".
@@ -215,6 +234,7 @@ module.exports = {
   buildOutreachEmail,
   SECTOR_EXPERIENCE,
   DEFAULT_EXPERIENCE,
+  CRYPTO_EXPERIENCE,
   experienceFor,
   SIGNATURE,
   SIGNOFF,

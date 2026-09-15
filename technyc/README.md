@@ -299,8 +299,12 @@ research step classifies each company into one of the sectors in `research.js`.
 
 `DEFAULT_EXPERIENCE` covers every sector with no entry of its own, so each email
 carries exactly one experience sentence and there is never a hole in the copy.
-Filled today: proptech, media, consumer, enterprise-saas, fintech. The rest fall
-back to the default.
+Filled today: proptech, media, consumer, enterprise-saas, fintech, crypto and
+blockchain (those two share one line). The rest fall back to the default.
+
+The classifier is told to send anything touching crypto, digital assets,
+tokens, stablecoins or blockchain infrastructure to `crypto`, even where it
+would otherwise read as fintech or infrastructure.
 
 **Every line is drawn from Jesse's resume, and the source is named in a comment
 beside it.** That is the standard: nothing may be inferred, rounded up, or
