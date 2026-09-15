@@ -7,6 +7,7 @@ const { parseFundingSection } = require("./parseFunding");
 const {
   buildOutreachEmail, SIGNATURE, SIGNOFF, SITE, LINKS, BOOKING_TEXT, BOOKING_URL,
   CONTACT_EMAIL, SUBSTANTIATION, SECTOR_EXPERIENCE, DEFAULT_EXPERIENCE, experienceFor,
+  SUBSTACK_URL, SUBSTACK_TEXT,
 } = require("./emailTemplate");
 
 let passed = 0;
@@ -103,16 +104,32 @@ ok("names the large firm alternative", withName.body.includes("cost prohibitive"
 ok("names the AI firm alternative", withName.body.includes("black box AI firm"));
 ok("points the reader at the site", withName.body.includes(SITE));
 ok("interpolates the site rather than printing the placeholder", !withName.body.includes("${SITE}"));
-// Jesse asked for this to be short. Keep it honest with a hard ceiling, and
-// measure the worst case: the sector line varies, so the longest one governs.
-const words = withName.body.split(/\s+/).length;
+// Jesse asked for this to be short. Keep it honest with a hard ceiling on the
+// prose, measured without the signature block: a contact line is not something
+// the reader wades through, so it should not eat the budget. Measure the worst
+// case, because the sector line varies and the longest one governs.
+const prose = (body) => body.replace(SIGNATURE, "").split(/\s+/).filter(Boolean).length;
+const words = prose(withName.body);
 const longest = Object.keys(SECTOR_EXPERIENCE).reduce((worst, sector) => {
-  const n = buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector }).body.split(/\s+/).length;
+  const n = prose(buildOutreachEmail({ ...rows[1], contactFirstName: "Alex", sector }).body);
   return n > worst.n ? { sector, n } : worst;
 }, { sector: "(default)", n: 0 });
-ok(`body stays under 245 words (was ${words})`, words < 245);
-ok(`worst sector stays under 245 words (${longest.sector} was ${longest.n})`, longest.n < 245);
+ok(`prose stays under 230 words (was ${words})`, words < 230);
+ok(`worst sector stays under 230 words (${longest.sector} was ${longest.n})`, longest.n < 230);
+ok("the signature stays short", SIGNATURE.split("\n").length <= 5);
 ok("carries the full signature block", withName.body.includes(SIGNATURE));
+// Jesse asked for the newsletter link in all of them, so check every shape the
+// builder can produce, not just this one.
+ok(
+  "every email points at the newsletter",
+  rows.every((row) =>
+    ["", ...Object.keys(SECTOR_EXPERIENCE)].every((sector) =>
+      [undefined, "Alex"].every((name) =>
+        buildOutreachEmail({ ...row, contactFirstName: name, sector }).body.includes(SUBSTACK_TEXT)
+      )
+    )
+  )
+);
 ok("includes the principal office address", withName.body.includes("765 Amsterdam Avenue"));
 ok("includes the office telephone number", withName.body.includes("917-541-8428"));
 ok("no em dash", !withName.body.includes("—"));
@@ -405,7 +422,8 @@ const linked = textToHtml(buildOutreachEmail({ company: "Acme", amountText: "$1 
 ok("links the site", linked.includes('<a href="https://yfgc.ai">yfgc.ai</a>'));
 ok("links the booking page", linked.includes(`<a href="${BOOKING_URL}">${BOOKING_TEXT}</a>`));
 ok("links the signature address as mailto", linked.includes(`<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`));
-check("emits exactly three anchors", (linked.match(/<a /g) || []).length, 3);
+ok("links the newsletter", linked.includes(`<a href="${SUBSTACK_URL}">${SUBSTACK_TEXT}</a>`));
+check("emits exactly four anchors", (linked.match(/<a /g) || []).length, 4);
 ok("leaves no placeholder sentinels behind", !linked.includes(String.fromCharCode(57344)));
 ok("does not nest anchors", !/<a [^>]*>[^<]*<a /.test(linked));
 

@@ -291,6 +291,21 @@ hunt, down from 10 and 12.
 Steady state is one identification and one address hunt per genuinely new
 company, about five a day.
 
+## The signature block
+
+`SIGNATURE` in `emailTemplate.js` carries the name, firm, principal office
+address, telephone number, email, and a link to the Fractionally Legal
+newsletter at https://fractionallyyours.substack.com/. Every email gets all of
+it, and a test enforces that across every sector and greeting variant.
+
+Anything in the copy that should be a real link in the HTML part needs an entry
+in `LINKS`, longest text first, so a shorter match cannot chew through a longer
+one. Four anchors today: the booking page, the newsletter, the signature
+address as a mailto, and the site.
+
+The word ceiling is measured on the prose with the signature removed, so adding
+a contact line does not eat the budget Jesse cares about.
+
 ## Tailoring the copy to a sector
 
 `SECTOR_EXPERIENCE` in `emailTemplate.js` holds one sentence of Jesse's own
