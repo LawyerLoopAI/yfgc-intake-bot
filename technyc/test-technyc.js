@@ -124,7 +124,9 @@ ok("no stale prior-results disclaimer", !/prior results/i.test(withName.body));
 
 const noName = buildOutreachEmail({ ...rows[0] });
 ok("falls back to a neutral greeting", noName.body.startsWith("Hello,"));
-ok("omits the round clause when the digest gave none", !/Series/.test(noName.body));
+// Scoped to the congratulations sentence: the experience paragraph legitimately
+// names the rounds Jesse closed in-house.
+ok("omits the round clause when the digest gave none", !/Series/.test(noName.body.split("\n\n")[1]));
 ok("still states the amount", noName.body.includes("$30 million"));
 
 const noInvestors = buildOutreachEmail({ ...rows[2], contactFirstName: "Alex" });
