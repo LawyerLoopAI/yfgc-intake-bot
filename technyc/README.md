@@ -291,6 +291,17 @@ hunt, down from 10 and 12.
 Steady state is one identification and one address hunt per genuinely new
 company, about five a day.
 
+## What the congratulations sentence says
+
+It names the company and the round, and nothing about the money. Jesse decided
+on 2026-09-15 not to quote the amount or the valuation back at the reader, who
+already knows both. The digest still supplies them, and the tracking sheet
+still records the amount; they just do not go out.
+
+The round is kept, because naming it is what shows the note is about this raise
+and not a form letter. When the digest gives no round, the sentence reads "new
+funding".
+
 ## The signature block
 
 `SIGNATURE` in `emailTemplate.js` carries the name, firm, principal office
