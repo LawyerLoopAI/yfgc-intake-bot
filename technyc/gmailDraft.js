@@ -188,4 +188,27 @@ async function updateDraft(authClient, draftId, opts) {
   return { id: res.data.id, messageId: res.data.message && res.data.message.id };
 }
 
-module.exports = { buildRawMessage, textToHtml, encodeHeader, createDraft, updateDraft };
+/**
+ * Send a draft that already exists, keeping Gmail's own record of it.
+ *
+ * Sending the draft rather than composing a fresh message means the thing that
+ * goes out is exactly the thing the tracking sheet links to, and a send that
+ * fails leaves the draft sitting there rather than losing the work.
+ *
+ * @param {object} authClient google OAuth2 client
+ * @param {string} draftId
+ * @returns {Promise<{id: string, threadId: string}>} the sent message
+ */
+async function sendDraft(authClient, draftId) {
+  const { google } = require("googleapis");
+  const gmail = google.gmail({ version: "v1", auth: authClient });
+  const res = await gmail.users.drafts.send({
+    userId: "me",
+    requestBody: { id: draftId },
+  });
+  return { id: res.data.id, threadId: res.data.threadId };
+}
+
+module.exports = {
+  buildRawMessage, textToHtml, encodeHeader, createDraft, updateDraft, sendDraft,
+};

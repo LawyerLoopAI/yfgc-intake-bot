@@ -6,7 +6,8 @@ const { parseMessage } = require("../gmail/parser");
 const { parseFundingSection } = require("../technyc/parseFunding");
 const { buildOutreachEmail, LINKS } = require("../technyc/emailTemplate");
 const { researchContact } = require("../technyc/research");
-const { createDraft, updateDraft, textToHtml } = require("../technyc/gmailDraft");
+const { createDraft, updateDraft, sendDraft, textToHtml } = require("../technyc/gmailDraft");
+const { decideSend } = require("../technyc/sendPolicy");
 const {
   sourceListParams,
   outreachSubjectQuery,
@@ -245,6 +246,22 @@ async function runPipeline() {
           ? await updateDraft(authClient, prior.draftId, payload)
           : await createDraft(authClient, payload);
 
+        // The draft is written first and sent second, always. A send that
+        // fails then leaves the draft in place for Jesse rather than losing
+        // the work, and what goes out is exactly what the sheet links to.
+        const decision = decideSend(row, contact);
+        let sent = false;
+        let sendError = null;
+        if (decision.send) {
+          try {
+            await sendDraft(authClient, draft.id);
+            sent = true;
+          } catch (err) {
+            sendError = err.message;
+            console.error(`technyc: send failed for ${row.company}:`, err.message);
+          }
+        }
+
         outcome.drafted.push({
           order,
           digest: digestDate(digest.subject),
@@ -252,6 +269,9 @@ async function runPipeline() {
           contact,
           draftId: draft.id,
           completed: prior.state === "addressless",
+          sent,
+          hold: decision.hold,
+          sendError,
         });
       } catch (err) {
         outcome.failed.push({ order, company: row.company, error: err.message });
@@ -330,17 +350,23 @@ module.exports = async (req, res) => {
 
     if (outcome.drafted.length || outcome.failed.length) {
       const date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" });
+      const sentCount = outcome.drafted.filter((d) => d.sent).length;
+      const heldCount = outcome.drafted.length - sentCount;
+      const parts = [
+        sentCount ? `${sentCount} sent` : null,
+        heldCount ? `${heldCount} waiting on you` : null,
+      ].filter(Boolean);
       await sendSummary(
         authClient,
-        `TechNYC outreach: ${outcome.drafted.length} draft${
-          outcome.drafted.length === 1 ? "" : "s"
-        } ready (${date})`,
+        `TechNYC outreach: ${parts.join(", ") || "nothing to send"} (${date})`,
         buildSummary(outcome, tracker)
       );
     }
 
     console.log(
-      `technyc: done. drafted=${outcome.drafted.length} skipped=${outcome.skipped.length} failed=${outcome.failed.length}`
+      `technyc: done. sent=${outcome.drafted.filter((d) => d.sent).length} ` +
+        `held=${outcome.drafted.filter((d) => !d.sent).length} ` +
+        `skipped=${outcome.skipped.length} failed=${outcome.failed.length}`
     );
     return reply(200, { ok: true, outcome });
   } catch (err) {

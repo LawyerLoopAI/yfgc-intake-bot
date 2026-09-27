@@ -269,8 +269,11 @@ work.
 
 ## Guardrails
 
-- Never send an outreach email. Drafts only. The summary to Jesse is the one
-  message you send.
+- Never decide for yourself whether an email goes out. `sendPolicy.js` decides,
+  and it sends only when a named person's address was found and the digest
+  stated an amount under $100 million. Everything else stays a draft. If you
+  are running this by hand rather than through `api/technyc.js`, draft only and
+  let Jesse send.
 - Never invent a name, title, funding amount, round, or investor. Every fact in
   a draft traces to the digest or to a page you actually read.
 - An address may be inferred from a pattern seen at least twice at that domain,

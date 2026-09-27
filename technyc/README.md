@@ -6,7 +6,10 @@ each of those companies into a personalized congratulations-and-introduction
 Gmail draft addressed to the company's CEO, or its founder where there is no
 CEO, and emails Jesse a summary of what is waiting for him.
 
-Drafts only. Nothing is ever sent to a prospect automatically.
+Sending is automatic, with two exceptions. An email goes out by itself only
+when a named person's address was found and the round came in under $100
+million. Anything else is left as a draft for Jesse, and the summary says which
+and why. See `sendPolicy.js`.
 
 ## How a run goes
 
@@ -247,10 +250,9 @@ digest date. A company first logged without an address gets that same row
 corrected when a later run finds one, rather than appearing twice. The same
 company raising again in a later digest is a genuinely new row.
 
-**Status never claims an email was sent.** This pipeline only drafts, so the
-column reads "Draft ready" or "Draft, needs an address". When a send step is
-added later it can update the row; writing "Sent" now would be a lie that gets
-hard to unpick.
+**Status says "Sent" only when Gmail confirmed it**, never because the policy
+meant to send. The other values are "Held for review: <reason>", "Draft, needs
+an address", "Send failed, draft kept: <error>", and "Draft ready".
 
 ### Why the bot creates the sheet itself
 
@@ -316,6 +318,38 @@ address as a mailto, and the site.
 
 The word ceiling is measured on the prose with the signature removed, so adding
 a contact line does not eat the budget Jesse cares about.
+
+## When an email sends itself
+
+`sendPolicy.js` holds the whole rule, kept pure and separate so it reads in one
+screen. It is the one module in the pipeline where a bug cannot be walked back:
+a draft can be edited or deleted, a sent email cannot.
+
+An email sends only when all of this holds:
+
+- a named person's address was found (a generic inbox never gets one, because
+  `research.js` returns no address at all rather than `info@`)
+- the digest stated an amount the parser could read
+- that amount is under $100 million
+
+Everything else stays a draft, and the summary names the reason. Two choices
+worth knowing:
+
+- **Exactly $100 million is held.** Jesse said "over $100M"; a round of exactly
+  that is plainly the kind he meant to see himself, so the tie breaks toward
+  review.
+- **An amount the parser could not read is held.** A threshold cannot be
+  applied to a number nobody has, and guessing in the permissive direction is
+  the wrong way to guess.
+
+The draft is always written first and sent second. A send that fails leaves the
+draft in place rather than losing the work, and what goes out is exactly what
+the tracking sheet links to.
+
+**The kill switch.** Set `TECHNYC_AUTOSEND=0` in the Vercel environment to hold
+everything as a draft again, with no deploy. It is read on every call, not once
+at module load, because a warm Vercel instance would otherwise keep applying a
+stale value.
 
 ## Tailoring the copy to a sector
 

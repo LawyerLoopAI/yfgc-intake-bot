@@ -461,6 +461,57 @@ check("summary sent query", summarySentQuery("September 10"), 'in:sent subject:"
 check("digest date", digestDate("Tech:NYC Digest: September 10"), "September 10");
 check("digest date when the prefix is absent", digestDate("Something else"), "Something else");
 
+console.log("\nsendPolicy");
+{
+  // This is the one module where a bug cannot be walked back: a draft can be
+  // edited or deleted, a sent email cannot. So the tests here are exhaustive
+  // about the boundary rather than representative.
+  const { decideSend, REVIEW_THRESHOLD_USD, formatUsd } = require("./sendPolicy");
+  const withEmail = { email: "ann@small.com" };
+
+  check("a small round to a real person sends", decideSend({ amountUsd: 4000000 }, withEmail).send, true);
+  check("and carries no hold reason", decideSend({ amountUsd: 4000000 }, withEmail).hold, null);
+
+  check("no address never sends", decideSend({ amountUsd: 4000000 }, { email: null }).send, false);
+  check("no contact at all never sends", decideSend({ amountUsd: 4000000 }, null).send, false);
+  ok("and says why", /no recipient/.test(decideSend({ amountUsd: 4000000 }, {}).hold));
+
+  // Jesse said "over $100M". A round of exactly $100M is held too: it is
+  // plainly the kind of raise he meant to see himself, and the tie should
+  // break toward review.
+  check("a dollar under the line sends", decideSend({ amountUsd: REVIEW_THRESHOLD_USD - 1 }, withEmail).send, true);
+  check("exactly on the line is held", decideSend({ amountUsd: REVIEW_THRESHOLD_USD }, withEmail).send, false);
+  check("over the line is held", decideSend({ amountUsd: REVIEW_THRESHOLD_USD + 1 }, withEmail).send, false);
+  ok("and names the line", /\$100 million/.test(decideSend({ amountUsd: 150000000 }, withEmail).hold));
+  ok("and quotes the raise", /\$150 million/.test(decideSend({ amountUsd: 150000000 }, withEmail).hold));
+
+  // A threshold cannot be applied to a number nobody has, and guessing in the
+  // permissive direction is the wrong way to guess.
+  for (const amount of [null, undefined, NaN, "70000000"]) {
+    check(`an unreadable amount (${String(amount)}) is held`, decideSend({ amountUsd: amount }, withEmail).send, false);
+  }
+  check("a missing row is held", decideSend(undefined, withEmail).send, false);
+  ok("and says the amount could not be read", /did not state an amount/.test(decideSend({}, withEmail).hold));
+
+  // The kill switch has to be read per call. A value captured at module load
+  // would keep applying on a warm Vercel instance after Jesse changed it,
+  // which is the one thing a kill switch must never do.
+  const before = process.env.TECHNYC_AUTOSEND;
+  process.env.TECHNYC_AUTOSEND = "0";
+  check("the kill switch stops a send with no reload", decideSend({ amountUsd: 4000000 }, withEmail).send, false);
+  ok("and names itself", /TECHNYC_AUTOSEND=0/.test(decideSend({ amountUsd: 4000000 }, withEmail).hold));
+  process.env.TECHNYC_AUTOSEND = "1";
+  check("and switching back resumes sending", decideSend({ amountUsd: 4000000 }, withEmail).send, true);
+  if (before === undefined) delete process.env.TECHNYC_AUTOSEND;
+  else process.env.TECHNYC_AUTOSEND = before;
+  check("unset means sending is on", decideSend({ amountUsd: 4000000 }, withEmail).send, true);
+
+  check("formats millions", formatUsd(4500000), "$4.5 million");
+  check("formats billions", formatUsd(1440000000), "$1.44 billion");
+  check("formats small numbers", formatUsd(750000), "$750,000");
+  ok("no em dash in any hold reason", !JSON.stringify(decideSend({}, {})).includes("\u2014"));
+}
+
 console.log("\nbuildSummary");
 const { buildSummary, cleanError } = require("./summary");
 const summary = buildSummary({
@@ -486,7 +537,7 @@ const summary = buildSummary({
   skipped: [{ company: "Sequen", reason: "already drafted or sent" }],
   failed: [],
 });
-ok("separates ready from needs-an-address", summary.indexOf("READY TO SEND") < summary.indexOf("NEEDS AN ADDRESS"));
+ok("separates held from needs-an-address", summary.indexOf("WAITING ON YOU") < summary.indexOf("NEEDS AN ADDRESS"));
 ok("shows the verified address", summary.includes("alex@inspiren.com (verified)"));
 ok("flags the empty To: line", summary.includes("no address for this person"));
 ok("lists skips with a reason", summary.includes("Sequen: already drafted or sent"));
@@ -506,8 +557,42 @@ const completedSummary = buildSummary({
 });
 ok("flags a draft that was filled in later", completedSummary.includes("filled in an earlier draft that had no address"));
 ok("says nothing about filling in for a fresh draft", !summary.includes("filled in an earlier draft"));
-ok("states nothing was sent", summary.includes("Nothing has been sent."));
+ok("counts what happened", summary.startsWith("1 held for you, 1 with no address."));
+ok("says automatic sending is on", summary.includes("Automatic sending is on"));
+ok("names the kill switch", summary.includes("TECHNYC_AUTOSEND=0"));
+ok("no longer claims nothing is ever sent", !summary.includes("never sent to a prospect"));
 ok("says nothing about time when the run completed", !summary.includes("time budget"));
+
+// Auto-send means the summary has to distinguish four outcomes, and put the
+// one Jesse did not expect at the top.
+const mixed = buildSummary({
+  digests: [], skipped: [], failed: [],
+  drafted: [
+    {
+      row: { company: "Small", amountText: "$4 million", round: "seed" },
+      contact: { fullName: "Ann Ray", title: "CEO", isCeo: true, email: "ann@small.com", emailConfidence: "verified", otherLeaders: [], notes: "", sources: [], errors: [] },
+      draftId: "s1", sent: true, hold: null,
+    },
+    {
+      row: { company: "Whale", amountText: "$150 million", round: "Series D" },
+      contact: { fullName: "Bo Lin", title: "CEO", isCeo: true, email: "bo@whale.com", emailConfidence: "verified", otherLeaders: [], notes: "", sources: [], errors: [] },
+      draftId: "s2", sent: false, hold: "$150 million is at or above the $100 million line, so this one is yours to review",
+    },
+    {
+      row: { company: "Broke", amountText: "$2 million", round: "seed" },
+      contact: { fullName: "Cy Ode", title: "CEO", isCeo: true, email: "cy@broke.com", emailConfidence: "verified", otherLeaders: [], notes: "", sources: [], errors: [] },
+      draftId: "s3", sent: false, hold: null, sendError: "Invalid To header",
+    },
+  ],
+});
+check("counts all three outcomes", mixed.split("\n")[0], "1 sent, 1 held for you, 1 that failed to send.");
+ok("the failure comes first", mixed.indexOf("TRIED TO SEND AND COULD NOT") < mixed.indexOf("WAITING ON YOU"));
+ok("and reassures the draft survived", mixed.includes("The draft is still there"));
+ok("names the send error", mixed.includes("send failed: Invalid To header"));
+ok("held companies come before sent ones", mixed.indexOf("WAITING ON YOU") < mixed.indexOf("SENT"));
+ok("gives the reason for the hold", mixed.includes("held because $150 million is at or above"));
+ok("a sent company is listed as sent", mixed.slice(mixed.indexOf("SENT")).includes("Small"));
+ok("a send failure is not counted as sent", !mixed.startsWith("2 sent"));
 
 // A run killed by the platform loses the sheet write and the summary, so the
 // watchdog returns early instead and the summary must admit it was cut short.
@@ -556,6 +641,22 @@ function runTrackerSuite() {
     "2026-09-14"
   );
   check("status flags a missing address", without[11], "Draft, needs an address");
+
+  const mk = (extra) => buildRow(
+    { row: { company: "X" }, contact: { email: "a@b.com" }, draftId: "d", ...extra },
+    "September 14", "2026-09-14"
+  )[11];
+  // "Sent" appears only when Gmail confirmed it, never because the policy
+  // intended to send. Anything else in this column would be a lie that gets
+  // hard to unpick later.
+  check("a confirmed send says Sent", mk({ sent: true }), "Sent");
+  check("a hold says why", mk({ sent: false, hold: "over the line" }), "Held for review: over the line");
+  check("a failed send does not say Sent", mk({ sent: false, sendError: "boom" }), "Send failed, draft kept: boom");
+  check(
+    "no address wins over a hold reason",
+    buildRow({ row: { company: "X" }, contact: { email: null }, draftId: "d", hold: "no recipient" }, "September 14", "2026-09-14")[11],
+    "Draft, needs an address"
+  );
   check("leaves the address blank rather than inventing one", without[8], "");
 
   console.log("\ntracker: upsert");

@@ -41,6 +41,19 @@ function rowKey(company, digest) {
  * @param {string} digest the digest subject date, e.g. "September 14"
  * @param {string} today ISO date string
  */
+/**
+ * The Status column. Ordered by what Jesse needs to see first: a failed send
+ * is the only state that needs him to do something unexpected.
+ */
+function sendStatus(entry) {
+  const { contact, sent, sendError, hold } = entry;
+  if (sendError) return `Send failed, draft kept: ${sendError}`;
+  if (sent) return "Sent";
+  if (!contact.email) return "Draft, needs an address";
+  if (hold) return `Held for review: ${hold}`;
+  return "Draft ready";
+}
+
 function buildRow(entry, digest, today) {
   const { row, contact, draftId } = entry;
   return [
@@ -55,10 +68,9 @@ function buildRow(entry, digest, today) {
     contact.email || "",
     contact.emailConfidence || "",
     contact.emailSource || "",
-    // Nothing is sent by this pipeline. Saying "Sent" here would be a lie that
-    // later becomes hard to unpick, so the sheet records what is true now and
-    // leaves room for a send step to update it.
-    contact.email ? "Draft ready" : "Draft, needs an address",
+    // What is actually true of this row right now. "Sent" appears only when
+    // Gmail confirmed the send, never because the policy meant to send.
+    sendStatus(entry),
     draftId ? `https://mail.google.com/mail/u/0/#drafts?compose=${draftId}` : "",
     row.website || "",
   ];
@@ -329,4 +341,5 @@ async function recordRuns(authClient, folderId, incoming) {
   return { added: appends.length, updated: updates.length, url };
 }
 
-module.exports = { ensureSheet, ensureLayout, loadLedger, recordRuns, buildRow, planWrites, rowKey, columnLetter, HEADERS, SHEET_NAME, TAB };
+module.exports = {
+  sendStatus, ensureSheet, ensureLayout, loadLedger, recordRuns, buildRow, planWrites, rowKey, columnLetter, HEADERS, SHEET_NAME, TAB };

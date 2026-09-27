@@ -67,11 +67,20 @@ function describe(row, contact, draftId, completed) {
 }
 
 function buildSummary(outcome, tracker) {
-  const ready = outcome.drafted.filter((d) => d.contact.email);
-  const needsAddress = outcome.drafted.filter((d) => !d.contact.email);
+  const sent = outcome.drafted.filter((d) => d.sent);
+  const failedToSend = outcome.drafted.filter((d) => !d.sent && d.sendError);
+  const needsAddress = outcome.drafted.filter((d) => !d.sent && !d.sendError && !d.contact.email);
+  const held = outcome.drafted.filter((d) => !d.sent && !d.sendError && d.contact.email);
+
+  const counts = [
+    sent.length ? `${sent.length} sent` : null,
+    held.length ? `${held.length} held for you` : null,
+    needsAddress.length ? `${needsAddress.length} with no address` : null,
+    failedToSend.length ? `${failedToSend.length} that failed to send` : null,
+  ].filter(Boolean);
 
   const lines = [
-    `${outcome.drafted.length} draft${outcome.drafted.length === 1 ? "" : "s"} created. Nothing has been sent.`,
+    counts.length ? `${counts.join(", ")}.` : "Nothing to report.",
     "",
   ];
 
@@ -82,14 +91,30 @@ function buildSummary(outcome, tracker) {
     );
   }
 
-  if (ready.length) {
-    lines.push("READY TO SEND", "");
-    for (const d of ready) lines.push(describe(d.row, d.contact, d.draftId, d.completed), "");
+  // Failures first: this is the only section that needs Jesse to do something
+  // he was not expecting.
+  if (failedToSend.length) {
+    lines.push("TRIED TO SEND AND COULD NOT", "", "The draft is still there, so nothing is lost.", "");
+    for (const d of failedToSend) {
+      lines.push(describe(d.row, d.contact, d.draftId, d.completed), `  send failed: ${cleanError(d.sendError)}`, "");
+    }
+  }
+
+  if (held.length) {
+    lines.push("WAITING ON YOU", "");
+    for (const d of held) {
+      lines.push(describe(d.row, d.contact, d.draftId, d.completed), `  held because ${d.hold}`, "");
+    }
   }
 
   if (needsAddress.length) {
     lines.push("NEEDS AN ADDRESS", "");
     for (const d of needsAddress) lines.push(describe(d.row, d.contact, d.draftId, d.completed), "");
+  }
+
+  if (sent.length) {
+    lines.push("SENT", "");
+    for (const d of sent) lines.push(describe(d.row, d.contact, d.draftId, d.completed), "");
   }
 
   if (outcome.skipped.length) {
@@ -121,7 +146,9 @@ function buildSummary(outcome, tracker) {
   lines.push(
     "Verified means the address was read off a page and matches the person's name. Pattern means it was built from a shape seen on at least two other real addresses at that domain, so worth a glance before sending. Generic inboxes such as info@ and privacy@ are never used: an empty To: line means nothing belonging to that person was found.",
     "",
-    "Sent by the TechNYC outreach pipeline. Drafts only, never sent to a prospect."
+    "Automatic sending is on. An email goes out by itself only when a named person's address was found and the round came in under $100 million. Anything else is left as a draft for you. Set TECHNYC_AUTOSEND=0 in Vercel to hold everything again.",
+    "",
+    "Sent by the TechNYC outreach pipeline."
   );
 
   return lines.join("\n");
